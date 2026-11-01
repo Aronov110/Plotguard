@@ -3,14 +3,14 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "plotguard",
+      "name": "plotpal",
       "devDependencies": {
         "@biomejs/biome": "2.6.4",
         "typescript": "7.0.2",
       },
     },
     "apps/api": {
-      "name": "@plotguard/api",
+      "name": "@plotpal/api",
       "version": "0.0.0",
       "dependencies": {
         "drizzle-orm": "0.45.4",
@@ -26,7 +26,7 @@
       },
     },
     "apps/web": {
-      "name": "@plotguard/web",
+      "name": "@plotpal/web",
       "version": "0.0.0",
       "dependencies": {
         "react": "19.3.1",
@@ -178,9 +178,9 @@
 
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
 
-    "@plotguard/api": ["@plotguard/api@workspace:apps/api"],
+    "@plotpal/api": ["@plotpal/api@workspace:apps/api"],
 
-    "@plotguard/web": ["@plotguard/web@workspace:apps/web"],
+    "@plotpal/web": ["@plotpal/web@workspace:apps/web"],
 
     "@rolldown/binding-android-arm-eabi": ["@rolldown/binding-android-arm-eabi@1.2.16", "", { "os": "android", "cpu": "arm" }, "sha512-ia3DwAs0OsMGS7+IConptSiyk9pEXkOx/AbJ2n/lAGxH3QkWQus1t8d7gnAT38FCU2sQu8lUbeR6AiZFv4JxaA=="],
 

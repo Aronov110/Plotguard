@@ -10,7 +10,7 @@ import {
 const base = "postgres://user:pw@127.0.0.1:5433";
 
 describe("assertTestDatabaseUrl", () => {
-  it.each(["plotguard_test", "a_test", "scratch_ab12cd_test", "x1_y2_test"])(
+  it.each(["plotpal_test", "a_test", "scratch_ab12cd_test", "x1_y2_test"])(
     "accepts the test database name %s",
     (name) => {
       expect(databaseName(assertTestDatabaseUrl(`${base}/${name}`))).toBe(name);
@@ -22,17 +22,17 @@ describe("assertTestDatabaseUrl", () => {
   });
 
   it.each([
-    ["the real database name", "plotguard"],
+    ["the real database name", "plotpal"],
     ["a name that only contains test", "testing_data"],
-    ["a name that only starts with test", "test_plotguard"],
+    ["a name that only starts with test", "test_plotpal"],
     ["a bare _test", "_test"],
     ["the word test alone", "test"],
-    ["uppercase letters", "Plotguard_test"],
-    ["a trailing suffix after _test", "plotguard_test_backup"],
-    ["a leading digit", "1plotguard_test"],
-    ["a hyphen", "plot-guard_test"],
-    ["a quote (SQL injection attempt)", 'x"; drop database plotguard; --_test'],
-    ["a space", "plot guard_test"],
+    ["uppercase letters", "Plotpal_test"],
+    ["a trailing suffix after _test", "plotpal_test_backup"],
+    ["a leading digit", "1plotpal_test"],
+    ["a hyphen", "plot-pal_test"],
+    ["a quote (SQL injection attempt)", 'x"; drop database plotpal; --_test'],
+    ["a space", "plot pal_test"],
   ])("rejects %s", (_label, name) => {
     expect(() => assertTestDatabaseUrl(`${base}/${encodeURIComponent(name)}`)).toThrow(
       TestDatabaseGuardError,
@@ -59,7 +59,7 @@ describe("assertTestDatabaseUrl", () => {
 
   it("does not leak the password in its error message", () => {
     try {
-      assertTestDatabaseUrl("postgres://user:hunter2-secret@host/plotguard");
+      assertTestDatabaseUrl("postgres://user:hunter2-secret@host/plotpal");
       expect.unreachable("should have thrown");
     } catch (error) {
       expect((error as Error).message).not.toContain("hunter2-secret");
@@ -69,7 +69,7 @@ describe("assertTestDatabaseUrl", () => {
 
 describe("adminUrlFor", () => {
   it("points at the postgres maintenance database and keeps credentials and host", () => {
-    const admin = new URL(adminUrlFor(new URL(`${base}/plotguard_test`)));
+    const admin = new URL(adminUrlFor(new URL(`${base}/plotpal_test`)));
     expect(admin.pathname).toBe("/postgres");
     expect(admin.username).toBe("user");
     expect(admin.password).toBe("pw");
@@ -79,12 +79,12 @@ describe("adminUrlFor", () => {
 
 describe("urlForDatabase", () => {
   it("swaps the database name when the new name is a valid test name", () => {
-    const url = urlForDatabase(new URL(`${base}/plotguard_test`), "scratch_1_test");
+    const url = urlForDatabase(new URL(`${base}/plotpal_test`), "scratch_1_test");
     expect(new URL(url).pathname).toBe("/scratch_1_test");
   });
 
   it("refuses a name that is not a test database", () => {
-    expect(() => urlForDatabase(new URL(`${base}/plotguard_test`), "plotguard")).toThrow(
+    expect(() => urlForDatabase(new URL(`${base}/plotpal_test`), "plotpal")).toThrow(
       TestDatabaseGuardError,
     );
   });

@@ -59,7 +59,7 @@ step (found by an EXPLAIN test). Both were fixed in the unreleased initial migra
 
 ## Test plan
 
-Integration tests run against a separate `plotguard_test` database; the helper refuses to run
+Integration tests run against a separate `plotpal_test` database; the helper refuses to run
 unless the database name ends in `_test`. Unit tests (no database) stay in `bun run test`;
 integration tests run with `bun run test:integration`.
 
