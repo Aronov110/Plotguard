@@ -14,10 +14,27 @@ Users sign up and sign in, and their work is stored in a database.
 ## Setup
 
 ```sh
-cp .env.example .env     # then change POSTGRES_PASSWORD (and DATABASE_URL to match)
+cp .env.example .env     # then change POSTGRES_PASSWORD (and both database URLs to match)
 bun install
-bun run db:up            # starts PostgreSQL on 127.0.0.1:5432
+bun run db:up            # starts PostgreSQL 18 on 127.0.0.1:5432 and waits until it is healthy
+bun run db:migrate       # creates the tables
 ```
+
+If port 5432 is already taken on your machine, set `POSTGRES_PORT` and the port in both database
+URLs in `.env`.
+
+## Database
+
+The schema lives in `apps/api/src/db/schema/` (one file per table) and the generated SQL migrations
+in `apps/api/drizzle/`. After changing the schema, generate a migration and review the SQL:
+
+```sh
+bun run db:generate -- --name=describe_the_change
+bun run db:migrate
+```
+
+Never edit a migration that has been merged; add a new one. Integration tests use the separate
+`*_test` database from `TEST_DATABASE_URL` and refuse to run against any other name.
 
 ## Run
 
@@ -31,13 +48,14 @@ bun run --filter @plotguard/web dev    # Web on http://127.0.0.1:5173
 ```sh
 bun run lint
 bun run typecheck
-bun run test
+bun run test               # unit tests, no database needed
+bun run test:integration   # needs the database from `bun run db:up`
 ```
 
 ## Layout
 
 ```
-apps/api   Fastify backend (TypeScript, Zod-validated env config)
+apps/api   Fastify backend (TypeScript, Zod-validated env config, Drizzle + PostgreSQL)
 apps/web   React + Vite frontend (Atomic Design under src/components)
 .plans/    Dated plans with a status header (draft / approved / done)
 ```

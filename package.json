@@ -14,6 +14,9 @@
     "format": "biome format --write .",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
+    "test:integration": "bun run --filter @plotguard/api test:integration",
+    "db:generate": "bun run --filter @plotguard/api db:generate",
+    "db:migrate": "bun run --filter @plotguard/api db:migrate",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down"
   },
