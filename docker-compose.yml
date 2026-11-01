@@ -1,3 +1,7 @@
+# Fixed project name: Docker object names (container, network, volume) must not depend on the
+# name of the folder the repository happens to be cloned into.
+name: plotpal
+
 services:
   db:
     image: postgres:18.6-alpine
@@ -11,7 +15,7 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       # PostgreSQL 18+ images keep data in a versioned subdirectory of /var/lib/postgresql.
-      - plotguard_db_data:/var/lib/postgresql
+      - plotpal_db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -19,4 +23,4 @@ services:
       retries: 10
 
 volumes:
-  plotguard_db_data:
+  plotpal_db_data:

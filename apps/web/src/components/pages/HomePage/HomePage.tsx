@@ -5,7 +5,7 @@ import "./HomePage.css";
 export function HomePage(): ReactElement {
   return (
     <main className="home-page">
-      <h1 className="home-page__title">Plotguard</h1>
+      <h1 className="home-page__title">Plotpal</h1>
       <p className="home-page__tagline">Write your story. Let AI catch what you missed.</p>
     </main>
   );

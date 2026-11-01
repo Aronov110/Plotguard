@@ -12,7 +12,7 @@ describe("HomePage", () => {
     render(<HomePage />);
     const headings = screen.getAllByRole("heading", { level: 1 });
     expect(headings).toHaveLength(1);
-    expect(headings[0]).toHaveTextContent("Plotguard");
+    expect(headings[0]).toHaveTextContent("Plotpal");
   });
 
   it("renders the tagline", () => {

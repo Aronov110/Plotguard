@@ -8,7 +8,7 @@ Outcome notes:
   5432, so the local `.env` sets `POSTGRES_PORT=5433`. The committed default stays 5432.
 - `tsx` was dropped: Node >= 24 runs `.ts` natively (`erasableSyntaxOnly` enforces compatible syntax).
 
-Plotguard is an app that helps writers of scripts and stories find plot holes and get ideas with AI.
+Plotpal is an app that helps writers of scripts and stories find plot holes and get ideas with AI.
 Users sign up and sign in; their work is stored in a database.
 
 ## Decisions (approved 2026-11-01)

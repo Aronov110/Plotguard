@@ -1,4 +1,4 @@
-# Plotguard
+# Plotpal
 
 An app that helps writers of scripts and stories find plot holes and get ideas with AI.
 Users sign up and sign in, and their work is stored in a database.
@@ -39,8 +39,8 @@ Never edit a migration that has been merged; add a new one. Integration tests us
 ## Run
 
 ```sh
-bun run --filter @plotguard/api dev    # API on http://127.0.0.1:3000  (GET /health)
-bun run --filter @plotguard/web dev    # Web on http://127.0.0.1:5173
+bun run --filter @plotpal/api dev    # API on http://127.0.0.1:3000  (GET /health)
+bun run --filter @plotpal/web dev    # Web on http://127.0.0.1:5173
 ```
 
 ## Checks

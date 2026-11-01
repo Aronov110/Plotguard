@@ -97,7 +97,7 @@ describe("schema drift", () => {
   it("has no difference between the Drizzle schema and the committed migrations", async () => {
     // Run drizzle-kit against a temporary copy of the migrations folder, so a failure can never
     // leave a stray migration file in the repository.
-    const workDir = await mkdtemp(join(tmpdir(), "plotguard-drift-"));
+    const workDir = await mkdtemp(join(tmpdir(), "plotpal-drift-"));
     const outDir = join(workDir, "drizzle");
     try {
       await cp(MIGRATIONS_FOLDER, outDir, { recursive: true });
