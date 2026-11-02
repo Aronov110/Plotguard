@@ -72,18 +72,31 @@ In production both names start with `__Host-`: browsers then accept the cookie o
 cannot plant its own login cookies in a visitor's browser. Development uses the plain names (and
 `Path=/auth` for the refresh cookie) because browsers refuse `Secure` cookies over plain http.
 
-Rules for the web app (Step 3):
+### Web app
 
-- **One origin.** The API must be reached from the same host as the page, behind a reverse proxy
-  (the Vite dev server in development). The page can only read the CSRF cookie of its own host,
-  and a `SameSite=Strict` cookie is not sent between `localhost` and `127.0.0.1`. Never loosen the
-  cookie to `SameSite=None` or add a `Domain` to work around this.
-- **Keep the path.** If the proxy mounts the API under a prefix such as `/api`, map it so that the
-  routes are still seen as `/auth/...` by the browser's cookie rules in development.
+Rules for the web app, and how it follows them:
+
+- **One origin.** The API must be reached from the same host as the page, behind a reverse proxy.
+  The page can only read the CSRF cookie of its own host, and a `SameSite=Strict` cookie is not
+  sent between `localhost` and `127.0.0.1`. Never loosen the cookie to `SameSite=None` or add a
+  `Domain` to work around this. In development the Vite server is that proxy: it forwards `/auth`
+  to the API (`API_URL`, default `http://127.0.0.1:3000`), so open the page at
+  **http://127.0.0.1:5173**, not `localhost`. Each new API area (for example `/projects`) is added
+  to the list in `apps/web/src/lib/dev-proxy.ts`, and the same list becomes the reverse-proxy rule
+  in production. Because of this, `/auth` is reserved: no page may use that address.
+- **Keep the path.** The proxy forwards paths unchanged. Do not mount the API under a prefix such
+  as `/api`: the development refresh cookie is limited to `Path=/auth`.
 - **A 401 from `/auth/refresh` is not always "signed out".** A tab that loses a refresh race gets a
-  401 although another tab just renewed the login. Re-read the cookie and retry once after a short
-  wait before showing the sign-in page.
-- Send `POST /auth/refresh` and `/auth/logout` with **no body and no content type**.
+  401 although another tab just renewed the login. `lib/auth/session-manager.ts` waits 300 ms and
+  retries once (re-reading the cookie) before it signs out.
+- **No body on refresh and logout.** `lib/api/auth-api.ts` sends `POST /auth/refresh` and
+  `/auth/logout` with no body and no content type.
+- **The access token lives in a variable** (`lib/auth/token-store.ts`), never in `localStorage`,
+  `sessionStorage` or IndexedDB. A page reload restores it from the refresh cookie. The session
+  manager renews it a minute before it expires, and `withAuth` renews it once and retries once
+  when a call gets a 401.
+- **The CSRF code** is read from `csrf_token` or `__Host-csrf_token` (`lib/auth/csrf-cookie.ts`)
+  and copied into `X-CSRF-Token`. Its absence means "not signed in": no refresh request is sent.
 
 ## Checks
 
