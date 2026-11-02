@@ -21,6 +21,9 @@ const PROTOCOL_DETAILS: Readonly<Record<string, string>> = {
   FST_ERR_MAX_PARAM_LENGTH: "A path parameter is too long.",
 };
 
+/** Statuses that mean "not allowed": not signed in, forbidden, too many requests. */
+const DENIAL_STATUSES: ReadonlySet<number> = new Set([401, 403, 429]);
+
 /** Longest `instance` value sent to the client. The path is attacker-controlled. */
 const MAX_INSTANCE_LENGTH = 200;
 
@@ -128,6 +131,19 @@ export function registerErrorHandling(app: FastifyInstance): void {
     const problem = toAppError(error);
     if (problem.status >= 500) {
       request.log.error({ err: error }, "Unhandled error while processing request");
+    } else if (DENIAL_STATUSES.has(problem.status)) {
+      // A security event: a refused sign-in, a forged request or a flood. Only the route pattern
+      // is logged, never the URL (it can hold ids) and never anything from the body or headers.
+      const route = request.routeOptions?.url;
+      request.log.warn(
+        {
+          event: "auth.denied",
+          status: problem.status,
+          code: problem.code,
+          ...(route === undefined ? {} : { route }),
+        },
+        "Request denied",
+      );
     }
     return sendProblem(request, reply, problem);
   });

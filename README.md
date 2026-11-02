@@ -47,6 +47,26 @@ bun run --filter @plotpal/web dev    # Web on http://127.0.0.1:5173
 API reference (generated from the route schemas): http://127.0.0.1:3000/docs/. Every API error is
 an RFC 9457 `application/problem+json` response.
 
+## Auth
+
+All under `/auth`; the full reference is at `/docs/`.
+
+| Route                 | Needs                                                   | Gives                              |
+| --------------------- | ------------------------------------------------------- | ---------------------------------- |
+| `POST /auth/register` | `Origin`                                                | access token + cookies             |
+| `POST /auth/login`    | `Origin`                                                | access token + cookies             |
+| `POST /auth/refresh`  | `Origin`, `refresh_token` cookie, `X-CSRF-Token` header | new access token + rotated cookies |
+| `POST /auth/logout`   | `Origin`, `refresh_token` cookie, `X-CSRF-Token` header | 204, cookies cleared               |
+| `GET /auth/me`        | `Authorization: Bearer <access token>`                  | the signed-in user                 |
+
+The access token lives in memory only. The refresh token is an `httpOnly`, `SameSite=Strict` cookie
+scoped to `/auth`. The web app copies the `csrf_token` cookie into the `X-CSRF-Token` header.
+
+In development the web app and the API must be reached through the **same hostname**. `localhost`
+and `127.0.0.1` count as different sites, so a `SameSite=Strict` cookie is not sent between them.
+Use `localhost` for both, or have the Vite dev server proxy `/api` so the browser sees one origin.
+Never loosen the cookie to `SameSite=None` to work around this.
+
 ## Checks
 
 ```sh

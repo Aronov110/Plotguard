@@ -9,6 +9,7 @@ import { connectTestDatabase, resetTables } from "../../db/test-support/test-dat
 import {
   createSession,
   findLiveSession,
+  findSessionFamily,
   type RotateOptions,
   revokeFamilyByToken,
   rotateSession,
@@ -103,6 +104,34 @@ describe("refresh sessions", () => {
       await expect(
         createSession(db(), { userId, familyId: randomUUID(), tokenHash: hash(), ttlDays }),
       ).rejects.toThrow(RangeError);
+    });
+  });
+
+  describe("findSessionFamily", () => {
+    it("finds a live token", async () => {
+      const { tokenHash, familyId } = await start();
+      await expect(findSessionFamily(db(), tokenHash)).resolves.toEqual({ userId, familyId });
+    });
+
+    it("finds a token that was replaced, revoked or has expired", async () => {
+      const { tokenHash, familyId } = await start();
+      await rotate(tokenHash);
+      await expect(findSessionFamily(db(), tokenHash)).resolves.toEqual({ userId, familyId });
+
+      const expired = await start();
+      await db().execute(
+        sql`update refresh_sessions
+            set created_at = now() - interval '2 days', expires_at = now() - interval '1 day'
+            where token_hash = ${expired.tokenHash}`,
+      );
+      await expect(findSessionFamily(db(), expired.tokenHash)).resolves.toEqual({
+        userId,
+        familyId: expired.familyId,
+      });
+    });
+
+    it("finds nothing for an unknown hash", async () => {
+      await expect(findSessionFamily(db(), hash())).resolves.toBeUndefined();
     });
   });
 

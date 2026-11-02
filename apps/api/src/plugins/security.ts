@@ -56,7 +56,7 @@ export function registerSecurity(app: FastifyInstance, env: Env): void {
     origin: [...env.CORS_ORIGINS],
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
     maxAge: 600,
   });
 }

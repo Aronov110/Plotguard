@@ -13,6 +13,7 @@
     "db:migrate": "node --env-file=../../.env src/db/migrate-cli.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "11.1.5",
     "@fastify/cors": "11.4.0",
     "@fastify/helmet": "13.2.0",
     "@fastify/rate-limit": "11.2.1",

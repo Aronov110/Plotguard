@@ -36,6 +36,23 @@ export async function createSession(
   return { expiresAt: new Date(row.expires_at) };
 }
 
+/**
+ * The user and login family of a token in ANY state: live, replaced, logged out or expired.
+ * Unknown hashes give `undefined`. The CSRF check needs the family before anything is rotated,
+ * and a replayed old token must still get that far so the theft detection can see it.
+ */
+export async function findSessionFamily(
+  db: Database,
+  tokenHash: string,
+): Promise<{ userId: string; familyId: string } | undefined> {
+  const [row] = await db
+    .select({ userId: refreshSessions.userId, familyId: refreshSessions.familyId })
+    .from(refreshSessions)
+    .where(eq(refreshSessions.tokenHash, tokenHash))
+    .limit(1);
+  return row;
+}
+
 /** The user and login family of a token that is neither revoked nor expired. */
 export async function findLiveSession(
   db: Database,

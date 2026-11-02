@@ -1,7 +1,40 @@
 Status: approved (2026-11-02). All ten proposed decisions (D1 to D10) accepted as recommended, two-PR split
 accepted, and the local `.env` may get a generated `JWT_ACCESS_SECRET` appended.
 
-PR B1 (`feat/auth-backend`): done (2026-11-02), pending review and commit. PR B2 (`feat/auth-routes`): not started.
+PR B1 (`feat/auth-backend`): done and committed (2026-11-02, `e54078c`), not pushed.
+PR B2 (`feat/auth-routes`, branched from B1): done (2026-11-02), pending review and commit.
+
+## PR B2 outcome notes
+
+- Checks: Biome and `tsc` clean; 631 unit tests (unchanged) and 419 integration tests (was 276).
+  A real-server run with real `fetch` and the real-strength hasher went through sign-up, `me`,
+  refresh, forged refreshes (no CSRF header, foreign origin), replay of an old token, a wrong and a
+  right login, logout and the docs, against the test database.
+- Design flaw found by the route tests, fixed: the first version of `/auth/refresh` looked the token
+  up with the live-only `identifyRefreshToken`, so a replayed old token got a 401 there and never
+  reached `rotateSession`: **theft detection could not fire**. `identifyRefreshToken` now finds a
+  token in any state (new `findSessionFamily`), so the CSRF check runs against the real family and
+  a replay reaches the rotation. Because the CSRF code is required first, a page on another site
+  cannot use this to knock a user out. This changed three B1 test expectations on purpose.
+- Deviations from the plan:
+  - `/auth/refresh` and `/auth/logout` do not clear cookies on a 401. A second tab that loses a
+    refresh race would otherwise delete the new cookie the winning tab has just received.
+  - Error responses are described in the OpenAPI tag text, not as per-route response schemas: the
+    response serializer would also run on error bodies and could turn a mismatch into a 500.
+  - The per-email limit uses `createRateLimit`, not a route hook: the per-address limiter marks a
+    request as counted, which would silently switch the second limiter off. A test proves it fires.
+  - `Authorization` accepts the scheme in any letter case (RFC 9110), exactly one space.
+  - Rate-limit defaults: register 10/h, login 10/min per address and 10/15 min per email,
+    refresh and logout 30/min. They live in `auth/limits.ts` and tests override them.
+- Security events are logged at `warn`: `auth.denied` (401, 403, 429, with status, code and route
+  pattern only) and `auth.refresh-reuse` (user and family ids only). A test proves that no password,
+  email, access token, refresh token or CSRF code appears in any log line of a full flow.
+- Known limits: an access token keeps working until it expires (15 min) after logout (a test pins
+  this on purpose); the in-memory rate limits are per process; an empty JSON body with
+  `Content-Type: application/json` on refresh is rejected by Fastify, so the web app must send no
+  body and no content type.
+- Still open for the Step 3 web work: the Vite proxy (or one shared hostname) in development, and
+  copying `csrf_token` into `X-CSRF-Token`.
 
 ## PR B1 outcome notes
 

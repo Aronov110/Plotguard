@@ -35,7 +35,27 @@ export function registerOpenApi(app: FastifyInstance): void {
           "Backend for Plotpal, an app that helps writers find plot holes and get ideas.",
         version: "0.0.0",
       },
-      tags: [{ name: "system", description: "Operational endpoints" }],
+      tags: [
+        { name: "system", description: "Operational endpoints" },
+        {
+          name: "auth",
+          description:
+            "Sign-up, sign-in and sessions. Errors are Problem Details (RFC 9457) with the " +
+            "content type `application/problem+json`: 400 invalid input, 401 not signed in or " +
+            "wrong credentials, 403 wrong origin or CSRF code, 409 email taken, 413 body too " +
+            "large, 415 not JSON, 429 too many requests (see `Retry-After`).",
+        },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "The access token from sign-up, login or refresh. Valid for 15 minutes.",
+          },
+        },
+      },
     },
     transform: jsonSchemaTransform,
   });

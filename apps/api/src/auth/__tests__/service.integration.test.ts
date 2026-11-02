@@ -602,11 +602,40 @@ describe("auth service", () => {
       await expect(build().identifyRefreshToken(token)).resolves.toBeUndefined();
     });
 
-    it("finds nothing for a revoked token", async () => {
+    // A token that is no longer live must still be identified. The CSRF check needs its family
+    // before anything is rotated, and a replayed old token has to reach the theft detection.
+    it("still identifies a token that has been replaced or logged out", async () => {
       const service = build();
       const first = await signUp(service);
+      const live = await service.identifyRefreshToken(first.refreshToken);
+      await service.refresh(first.refreshToken);
+      await expect(service.identifyRefreshToken(first.refreshToken)).resolves.toEqual(live);
       await service.logout(first.refreshToken);
-      await expect(service.identifyRefreshToken(first.refreshToken)).resolves.toBeUndefined();
+      await expect(service.identifyRefreshToken(first.refreshToken)).resolves.toEqual(live);
+    });
+
+    it("still identifies an expired token", async () => {
+      const service = build();
+      const first = await signUp(service);
+      const live = await service.identifyRefreshToken(first.refreshToken);
+      await handle.db.execute(
+        sql`update refresh_sessions
+            set created_at = now() - interval '2 days', expires_at = now() - interval '1 day'`,
+      );
+      await expect(service.identifyRefreshToken(first.refreshToken)).resolves.toEqual(live);
+    });
+
+    it("lets a replayed old token reach the theft detection after its family was identified", async () => {
+      const service = build();
+      const first = await signUp(service);
+      const family = await service.identifyRefreshToken(first.refreshToken);
+      await service.refresh(first.refreshToken);
+      await handle.db.execute(
+        sql`update refresh_sessions set revoked_at = now() - interval '5 minutes' where revoked_at is not null`,
+      );
+      expect(service.verifyCsrf(family?.familyId ?? "", first.csrfToken)).toBe(true);
+      await expect(service.refresh(first.refreshToken)).rejects.toBeInstanceOf(UnauthorizedError);
+      expect(events).toHaveLength(1);
     });
 
     it("rejects a CSRF code from another login", async () => {

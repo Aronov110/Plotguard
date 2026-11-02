@@ -14,7 +14,12 @@ import {
   normalizeEmail,
 } from "./credentials.ts";
 import { checkPasswordPolicy, PASSWORD_ISSUE_MESSAGES, type PasswordHasher } from "./password.ts";
-import { createSession, findLiveSession, revokeFamilyByToken, rotateSession } from "./sessions.ts";
+import {
+  createSession,
+  findSessionFamily,
+  revokeFamilyByToken,
+  rotateSession,
+} from "./sessions.ts";
 import {
   type AccessTokens,
   type CsrfTokens,
@@ -34,7 +39,7 @@ import {
 
 /** One message for every failed login, so the answer never says which half was wrong. */
 const INVALID_CREDENTIALS = "Invalid email or password.";
-const SESSION_EXPIRED = "Your session has expired. Sign in again.";
+export const SESSION_EXPIRED = "Your session has expired. Sign in again.";
 /** Far longer than any allowed password, so a huge value is refused before it is normalised. */
 const MAX_LOGIN_PASSWORD_UNITS = 4096;
 
@@ -96,7 +101,11 @@ export interface AuthService {
   refresh(refreshToken: string): Promise<AuthResult>;
   /** Ends the login. Never fails because of the token: a missing or bad one is a no-op. */
   logout(refreshToken: string | undefined): Promise<void>;
-  /** The user and login family behind a live refresh token, for the CSRF check. */
+  /**
+   * The user and login family behind a refresh token in ANY state (live, replaced, logged out or
+   * expired); `undefined` only for a token that was never issued. The CSRF check needs the family
+   * before anything is rotated, and a replayed old token must still reach the theft detection.
+   */
   identifyRefreshToken(
     refreshToken: string | undefined,
   ): Promise<{ userId: string; familyId: string } | undefined>;
@@ -247,7 +256,7 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
 
     async identifyRefreshToken(refreshToken) {
       if (refreshToken === undefined || !isWellFormedRefreshToken(refreshToken)) return undefined;
-      return findLiveSession(db, hashRefreshToken(refreshToken));
+      return findSessionFamily(db, hashRefreshToken(refreshToken));
     },
 
     verifyCsrf: (familyId, candidate) => csrf.verify(familyId, candidate),
