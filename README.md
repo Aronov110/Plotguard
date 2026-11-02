@@ -15,6 +15,7 @@ Users sign up and sign in, and their work is stored in a database.
 
 ```sh
 cp .env.example .env     # then change POSTGRES_PASSWORD (and both database URLs to match)
+                         # and set JWT_ACCESS_SECRET (the command is in .env.example)
 bun install
 bun run db:up            # starts PostgreSQL 18 on 127.0.0.1:5432 and waits until it is healthy
 bun run db:migrate       # creates the tables
@@ -45,6 +46,44 @@ bun run --filter @plotpal/web dev    # Web on http://127.0.0.1:5173
 
 API reference (generated from the route schemas): http://127.0.0.1:3000/docs/. Every API error is
 an RFC 9457 `application/problem+json` response.
+
+## Auth
+
+All under `/auth`; the full reference is at `/docs/`.
+
+| Route                 | Needs                                                   | Gives                              |
+| --------------------- | ------------------------------------------------------- | ---------------------------------- |
+| `POST /auth/register` | `Origin`                                                | access token + cookies             |
+| `POST /auth/login`    | `Origin`                                                | access token + cookies             |
+| `POST /auth/refresh`  | `Origin`, `refresh_token` cookie, `X-CSRF-Token` header | new access token + rotated cookies |
+| `POST /auth/logout`   | `Origin`, `refresh_token` cookie, `X-CSRF-Token` header | 204, cookies cleared               |
+| `GET /auth/me`        | `Authorization: Bearer <access token>`                  | the signed-in user                 |
+
+The access token lives in memory only. The refresh token is an `httpOnly`, `SameSite=Strict` cookie.
+The web app copies the CSRF cookie into the `X-CSRF-Token` header.
+
+| Cookie  | Development     | Production (`NODE_ENV=production`) |
+| ------- | --------------- | ---------------------------------- |
+| refresh | `refresh_token` | `__Host-refresh_token`             |
+| CSRF    | `csrf_token`    | `__Host-csrf_token`                |
+
+In production both names start with `__Host-`: browsers then accept the cookie only if it is
+`Secure`, has `Path=/` and no `Domain`, and refuse one set by another host, so a sibling subdomain
+cannot plant its own login cookies in a visitor's browser. Development uses the plain names (and
+`Path=/auth` for the refresh cookie) because browsers refuse `Secure` cookies over plain http.
+
+Rules for the web app (Step 3):
+
+- **One origin.** The API must be reached from the same host as the page, behind a reverse proxy
+  (the Vite dev server in development). The page can only read the CSRF cookie of its own host,
+  and a `SameSite=Strict` cookie is not sent between `localhost` and `127.0.0.1`. Never loosen the
+  cookie to `SameSite=None` or add a `Domain` to work around this.
+- **Keep the path.** If the proxy mounts the API under a prefix such as `/api`, map it so that the
+  routes are still seen as `/auth/...` by the browser's cookie rules in development.
+- **A 401 from `/auth/refresh` is not always "signed out".** A tab that loses a refresh race gets a
+  401 although another tab just renewed the login. Re-read the cookie and retry once after a short
+  wait before showing the sign-in page.
+- Send `POST /auth/refresh` and `/auth/logout` with **no body and no content type**.
 
 ## Checks
 

@@ -123,3 +123,17 @@ export class RateLimitError extends AppError {
     });
   }
 }
+
+/** 503: the server is temporarily too busy, for example when too many password hashes are queued. */
+export class ServiceBusyError extends AppError {
+  constructor(options: CauseOption = {}) {
+    super({
+      status: 503,
+      code: "service-busy",
+      title: "Service Unavailable",
+      detail: "The server is busy. Try again in a moment.",
+      headers: { "retry-after": "2" },
+      ...options,
+    });
+  }
+}

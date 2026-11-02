@@ -7,6 +7,7 @@ import { createDatabase } from "../db/client.ts";
 const BASE_ENV: Record<string, string> = {
   NODE_ENV: "test",
   DATABASE_URL: "postgres://user:pass@127.0.0.1:5432/db",
+  JWT_ACCESS_SECRET: "test-only-secret-never-use-outside-tests-0123456789",
 };
 
 /** Builds a validated test environment. Extra variables override the defaults. */
