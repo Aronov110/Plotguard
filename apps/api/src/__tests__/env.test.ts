@@ -124,8 +124,48 @@ describe("loadEnv", () => {
       ["a non-http scheme", "ftp://a.example.com"],
       ["the string null", "null"],
       ["garbage", "not an origin"],
+      ["a wildcard host", "http://*"],
+      ["a wildcard subdomain", "https://*.example.com"],
+      ["a wildcard inside a host", "https://app.*.example.com"],
+      ["a backslash", "http://good.com\\evil"],
+      ["an encoded backslash tail", "https://good.com\\"],
     ])("rejects %s", (_label, value) => {
       expect(() => load(value)).toThrow(EnvValidationError);
+    });
+
+    it("keeps http origins in development and test", () => {
+      for (const NODE_ENV of ["development", "test"]) {
+        expect(load("http://localhost:5173", { NODE_ENV }).CORS_ORIGINS).toEqual([
+          "http://localhost:5173",
+        ]);
+      }
+    });
+
+    it.each([
+      ["a single http origin", "http://app.example.com"],
+      ["http localhost", "http://localhost:5173"],
+      ["one http origin in a mixed list", "https://app.example.com,http://other.example.com"],
+      ["an uppercase http scheme", "HTTP://app.example.com"],
+    ])("rejects %s in production", (_label, value) => {
+      expect(() => load(value, { NODE_ENV: "production" })).toThrow(EnvValidationError);
+    });
+
+    it("accepts several https origins in production", () => {
+      const env = load("https://app.example.com, https://admin.example.com", {
+        NODE_ENV: "production",
+      });
+      expect(env.CORS_ORIGINS).toEqual(["https://app.example.com", "https://admin.example.com"]);
+    });
+
+    it("explains the https rule in production without echoing the value", () => {
+      try {
+        load("http://secret-host.example.com", { NODE_ENV: "production" });
+        expect.unreachable("loadEnv should have thrown");
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(message).toContain("https");
+        expect(message).not.toContain("secret-host");
+      }
     });
 
     it("is required in production", () => {

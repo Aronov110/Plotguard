@@ -26,15 +26,6 @@ export function registerSecurity(app: FastifyInstance, env: Env): void {
     },
   });
 
-  app.register(cors, {
-    // Exact-match allowlist. Never a wildcard: credentials are enabled.
-    origin: [...env.CORS_ORIGINS],
-    credentials: true,
-    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    maxAge: 600,
-  });
-
   app.register(rateLimit, {
     global: true,
     max: env.RATE_LIMIT_MAX,
@@ -43,10 +34,29 @@ export function registerSecurity(app: FastifyInstance, env: Env): void {
     errorResponseBuilder: (_request, context) => new RateLimitError(context.ttl / 1000),
   });
 
-  // Unknown URLs are rate limited too, so attackers cannot probe for valid routes at will.
-  // Runs once the rate-limit plugin has loaded, because `app.rateLimit()` is added by it.
+  // Runs once the rate-limit plugin has loaded, because `app.rateLimit()` is added by it, and
+  // before CORS is registered, so the hook below runs before CORS answers preflights.
   app.after((error) => {
     if (error) throw error;
-    app.setNotFoundHandler({ preHandler: app.rateLimit() }, notFoundHandler);
+    const limit = app.rateLimit();
+
+    // The global limiter is a route-level hook, and @fastify/cors (an app-level hook) answers
+    // preflights itself and ends the request, so preflights would never be counted. Count them
+    // here. The limiter marks a request as counted, so nothing is counted twice.
+    app.addHook("onRequest", async (request, reply) => {
+      if (request.method === "OPTIONS") await limit.call(app, request, reply);
+    });
+
+    // Unknown URLs are rate limited too, so attackers cannot probe for valid routes at will.
+    app.setNotFoundHandler({ preHandler: limit }, notFoundHandler);
+  });
+
+  app.register(cors, {
+    // Exact-match allowlist. Never a wildcard: credentials are enabled.
+    origin: [...env.CORS_ORIGINS],
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 600,
   });
 }

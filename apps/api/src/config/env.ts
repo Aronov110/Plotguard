@@ -5,8 +5,11 @@ const DEFAULT_DEV_CORS_ORIGINS: readonly string[] = [
   "http://localhost:5173",
 ];
 
-/** scheme://host[:port] only: no path, query, fragment, credentials or trailing slash. */
-const ORIGIN_PATTERN = /^https?:\/\/[^/?#@\s]+$/i;
+/**
+ * scheme://host[:port] only: no path, query, fragment, credentials, trailing slash, wildcard or
+ * backslash (URL parsers treat `\` like `/`, which would silently rewrite the value).
+ */
+const ORIGIN_PATTERN = /^https?:\/\/[^/\\?#@*\s]+$/i;
 
 /** Returns the normalised origin, or undefined when the value is not a plain http(s) origin. */
 function parseOrigin(value: string): string | undefined {
@@ -46,6 +49,17 @@ const envSchema = z
           path: ["CORS_ORIGINS"],
           message:
             "CORS_ORIGINS must be a comma-separated list of origins such as https://app.example.com (no wildcard, path or credentials)",
+        });
+        return z.NEVER;
+      }
+      if (
+        rest.NODE_ENV === "production" &&
+        origins.some((origin) => !origin.startsWith("https://"))
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["CORS_ORIGINS"],
+          message: "CORS_ORIGINS must use https:// origins in production",
         });
         return z.NEVER;
       }
