@@ -43,6 +43,9 @@ bun run --filter @plotpal/api dev    # API on http://127.0.0.1:3000  (GET /healt
 bun run --filter @plotpal/web dev    # Web on http://127.0.0.1:5173
 ```
 
+API reference (generated from the route schemas): http://127.0.0.1:3000/docs/. Every API error is
+an RFC 9457 `application/problem+json` response.
+
 ## Checks
 
 ```sh

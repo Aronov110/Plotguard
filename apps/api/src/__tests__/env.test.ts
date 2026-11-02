@@ -11,6 +11,9 @@ describe("loadEnv", () => {
       API_HOST: "127.0.0.1",
       API_PORT: 3000,
       DATABASE_URL: validDatabaseUrl,
+      CORS_ORIGINS: ["http://127.0.0.1:5173", "http://localhost:5173"],
+      RATE_LIMIT_MAX: 100,
+      RATE_LIMIT_WINDOW_SECONDS: 60,
     });
   });
 
@@ -79,5 +82,100 @@ describe("loadEnv", () => {
     } catch (error) {
       expect((error as Error).message).not.toContain("super-secret-password");
     }
+  });
+
+  describe("CORS_ORIGINS", () => {
+    const load = (CORS_ORIGINS: string, extra: Record<string, string> = {}) =>
+      loadEnv({ DATABASE_URL: validDatabaseUrl, CORS_ORIGINS, ...extra });
+
+    it("parses a comma-separated list and trims whitespace", () => {
+      expect(load(" https://app.example.com , http://localhost:5173 ").CORS_ORIGINS).toEqual([
+        "https://app.example.com",
+        "http://localhost:5173",
+      ]);
+    });
+
+    it("accepts a single origin", () => {
+      expect(load("https://app.example.com").CORS_ORIGINS).toEqual(["https://app.example.com"]);
+    });
+
+    it("removes duplicates", () => {
+      expect(load("https://a.example.com,https://a.example.com").CORS_ORIGINS).toEqual([
+        "https://a.example.com",
+      ]);
+    });
+
+    it("normalises a trailing-slash-free origin with a default port", () => {
+      expect(load("https://app.example.com:443").CORS_ORIGINS).toEqual(["https://app.example.com"]);
+    });
+
+    it.each([
+      ["a wildcard", "*"],
+      ["a wildcard in a list", "https://a.example.com,*"],
+      ["an empty value", ""],
+      ["only whitespace", "   "],
+      ["an empty entry", "https://a.example.com,,https://b.example.com"],
+      ["a trailing comma", "https://a.example.com,"],
+      ["a path", "https://a.example.com/app"],
+      ["a trailing slash", "https://a.example.com/"],
+      ["a query string", "https://a.example.com?x=1"],
+      ["credentials in the URL", "https://user:pass@a.example.com"],
+      ["no scheme", "a.example.com"],
+      ["a non-http scheme", "ftp://a.example.com"],
+      ["the string null", "null"],
+      ["garbage", "not an origin"],
+    ])("rejects %s", (_label, value) => {
+      expect(() => load(value)).toThrow(EnvValidationError);
+    });
+
+    it("is required in production", () => {
+      expect(() => loadEnv({ DATABASE_URL: validDatabaseUrl, NODE_ENV: "production" })).toThrow(
+        EnvValidationError,
+      );
+    });
+
+    it("is accepted in production when set", () => {
+      const env = load("https://app.example.com", { NODE_ENV: "production" });
+      expect(env.CORS_ORIGINS).toEqual(["https://app.example.com"]);
+    });
+
+    it("never echoes the offending value in the error", () => {
+      try {
+        load("https://user:hunter2@a.example.com");
+        expect.unreachable("loadEnv should have thrown");
+      } catch (error) {
+        expect((error as Error).message).not.toContain("hunter2");
+      }
+    });
+  });
+
+  describe("rate limit settings", () => {
+    it("coerces numeric strings", () => {
+      const env = loadEnv({
+        DATABASE_URL: validDatabaseUrl,
+        RATE_LIMIT_MAX: "5",
+        RATE_LIMIT_WINDOW_SECONDS: "10",
+      });
+      expect(env.RATE_LIMIT_MAX).toBe(5);
+      expect(env.RATE_LIMIT_WINDOW_SECONDS).toBe(10);
+    });
+
+    it.each(["0", "-1", "abc", "1.5", "", "100001"])(
+      "rejects invalid RATE_LIMIT_MAX %j",
+      (value) => {
+        expect(() => loadEnv({ DATABASE_URL: validDatabaseUrl, RATE_LIMIT_MAX: value })).toThrow(
+          EnvValidationError,
+        );
+      },
+    );
+
+    it.each(["0", "-1", "abc", "1.5", "", "86401"])(
+      "rejects invalid RATE_LIMIT_WINDOW_SECONDS %j",
+      (value) => {
+        expect(() =>
+          loadEnv({ DATABASE_URL: validDatabaseUrl, RATE_LIMIT_WINDOW_SECONDS: value }),
+        ).toThrow(EnvValidationError);
+      },
+    );
   });
 });
