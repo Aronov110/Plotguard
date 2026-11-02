@@ -17,7 +17,12 @@ const PROTOCOL_DETAILS: Readonly<Record<string, string>> = {
   FST_ERR_CTP_INVALID_JSON_BODY: "The request body is not valid JSON.",
   FST_ERR_CTP_EMPTY_JSON_BODY: "The request body is empty.",
   FST_ERR_CTP_INVALID_CONTENT_LENGTH: "The Content-Length header does not match the body.",
+  FST_ERR_BAD_URL: "The request URL is malformed.",
+  FST_ERR_MAX_PARAM_LENGTH: "A path parameter is too long.",
 };
+
+/** Longest `instance` value sent to the client. The path is attacker-controlled. */
+const MAX_INSTANCE_LENGTH = 200;
 
 function readStatus(error: unknown): number | undefined {
   if (typeof error !== "object" || error === null) return undefined;
@@ -75,7 +80,8 @@ function toAppError(error: unknown): AppError {
 }
 
 function instanceOf(request: FastifyRequest): string {
-  return request.url.split("?")[0] ?? request.url;
+  const path = request.url.split("?")[0] ?? request.url;
+  return path.length > MAX_INSTANCE_LENGTH ? `${path.slice(0, MAX_INSTANCE_LENGTH - 1)}…` : path;
 }
 
 function sendProblem(request: FastifyRequest, reply: FastifyReply, error: AppError): FastifyReply {
@@ -92,6 +98,24 @@ function sendProblem(request: FastifyRequest, reply: FastifyReply, error: AppErr
  */
 export function notFoundHandler(request: FastifyRequest, reply: FastifyReply): FastifyReply {
   return sendProblem(request, reply, new NotFoundError());
+}
+
+/**
+ * Handler for errors Fastify raises before routing, such as a malformed URL. They happen before
+ * any hook runs, so helmet has not set its headers: `nosniff` is added here. There is no
+ * `instance`, because the request path is the thing that is invalid.
+ */
+export function frameworkErrorHandler(
+  error: FastifyError,
+  _request: FastifyRequest,
+  reply: FastifyReply,
+): FastifyReply {
+  const problem = toAppError(error);
+  return reply
+    .status(problem.status)
+    .headers({ ...problem.headers, "x-content-type-options": "nosniff" })
+    .type(PROBLEM_CONTENT_TYPE)
+    .send(toProblemDetails(problem));
 }
 
 /**

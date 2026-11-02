@@ -4,7 +4,7 @@ import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod
 import type { Env } from "./config/env.ts";
 import { buildLoggerOptions } from "./config/logger.ts";
 import type { Database, DatabaseHandle } from "./db/client.ts";
-import { registerErrorHandling } from "./errors/error-handler.ts";
+import { frameworkErrorHandler, registerErrorHandling } from "./errors/error-handler.ts";
 import { registerOpenApi } from "./plugins/openapi.ts";
 import { registerSecurity } from "./plugins/security.ts";
 import { healthRoutes } from "./routes/health.ts";
@@ -31,20 +31,27 @@ export function buildApp(env: Env, deps: AppDependencies): FastifyInstance {
   const app = Fastify({
     logger: buildLoggerOptions(env, deps.logStream),
     bodyLimit: BODY_LIMIT_BYTES,
+    frameworkErrors: frameworkErrorHandler,
   });
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandling(app);
 
+  // text/plain is a CORS-safelisted content type, so a cross-site page can send it without a
+  // preflight. The API speaks JSON only: anything else is answered with 415.
+  app.removeContentTypeParser("text/plain");
+
   app.decorate("db", deps.database.db);
   app.addHook("onClose", async () => {
     await deps.database.close();
   });
 
-  // Order matters: OpenAPI and the security hooks must exist before the routes are registered.
-  registerOpenApi(app);
+  // Order matters. The rate limit attaches to routes through an onRoute hook, and a child scope
+  // keeps only the hooks that existed when it was created. So security comes first, which makes
+  // the docs routes (registered by OpenAPI) rate limited too. Both come before the routes.
   registerSecurity(app, env);
+  registerOpenApi(app);
 
   app.register(healthRoutes);
 
