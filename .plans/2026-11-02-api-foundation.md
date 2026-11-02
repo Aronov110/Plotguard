@@ -1,4 +1,4 @@
-Status: done (2026-11-02), pending review and commit
+Status: done (2026-11-02), merged in PR #4
 
 # Step 2a: API foundation
 

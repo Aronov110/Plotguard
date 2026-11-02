@@ -1,4 +1,4 @@
-Status: done (2026-11-02), pending review and commit. Decisions: preflight counting via an OPTIONS-only
+Status: done (2026-11-02), merged in PR #5. Decisions: preflight counting via an OPTIONS-only
 limiter hook (fallback: leave preflights unmetered and document it, never swap the order); query-string
 stripping stays in this PR; the deferred list is accepted as written.
 

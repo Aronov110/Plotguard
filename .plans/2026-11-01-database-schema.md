@@ -1,4 +1,4 @@
-Status: done (2026-11-01), pending review and commit
+Status: done (2026-11-01), merged in PR #2
 
 # Step 1: Database schema and migrations
 
