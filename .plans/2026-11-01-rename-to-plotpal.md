@@ -1,4 +1,4 @@
-Status: approved
+Status: done (2026-11-01), merged in PR #3
 
 # Rename the project from Plotguard to Plotpal
 

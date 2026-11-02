@@ -1,8 +1,10 @@
-Status: approved (2026-11-02). All ten proposed decisions (D1 to D10) accepted as recommended, two-PR split
-accepted, and the local `.env` may get a generated `JWT_ACCESS_SECRET` appended.
+Status: done (2026-11-02), merged in PR #6. All ten proposed decisions (D1 to D10) accepted as
+recommended, two-PR split accepted, and the local `.env` may get a generated `JWT_ACCESS_SECRET`
+appended.
 
-PR B1 (`feat/auth-backend`): done and committed (2026-11-02, `e54078c`), not pushed.
-PR B2 (`feat/auth-routes`, branched from B1): done (2026-11-02), pending review and commit.
+PR B1 (`feat/auth-backend`): committed as `e54078c`.
+PR B2 (`feat/auth-routes`, branched from B1): committed as `5f52b35` and `246ed7e`.
+Both went to GitHub together as PR #6, because the branch `feat/auth-routes` contained B1.
 
 ## PR B2 outcome notes
 
