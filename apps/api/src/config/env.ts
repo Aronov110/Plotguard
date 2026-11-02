@@ -36,12 +36,18 @@ const databaseUrlSchema = z
 
 /** The value `.env.example` ships with. It must never be used for real. */
 const SECRET_PLACEHOLDER_PREFIX = "change-me";
+const MIN_DISTINCT_SECRET_CHARACTERS = 12;
 
 const jwtSecretSchema = z
   .string()
   .min(32, "JWT_ACCESS_SECRET must be at least 32 characters")
   .refine((value) => value === value.trim(), {
     message: "JWT_ACCESS_SECRET must not start or end with whitespace",
+  })
+  // A cheap guard against "aaaaaaaa..." and keyboard patterns. Random base64 or hex easily has 12
+  // or more different characters; a 48-byte base64 secret has about 50.
+  .refine((value) => new Set(value).size >= MIN_DISTINCT_SECRET_CHARACTERS, {
+    message: "JWT_ACCESS_SECRET is too repetitive; generate a random one (see .env.example)",
   });
 
 const envSchema = z
@@ -68,14 +74,18 @@ const envSchema = z
     const { CORS_ORIGINS: rawOrigins, ...rest } = raw;
     let corsOrigins: readonly string[] = DEFAULT_DEV_CORS_ORIGINS;
 
+    // The placeholder is public (it is in .env.example), so a server using it has forgeable
+    // tokens. Only the test suite may use it. A staging copy started with NODE_ENV=development
+    // is just as exposed as a production one, which is why development is refused too.
     if (
-      rest.NODE_ENV === "production" &&
+      rest.NODE_ENV !== "test" &&
       rest.JWT_ACCESS_SECRET.toLowerCase().startsWith(SECRET_PLACEHOLDER_PREFIX)
     ) {
       ctx.addIssue({
         code: "custom",
         path: ["JWT_ACCESS_SECRET"],
-        message: "JWT_ACCESS_SECRET still has the placeholder value; generate a real one",
+        message:
+          "JWT_ACCESS_SECRET still has the placeholder value from .env.example; generate a real one",
       });
       return z.NEVER;
     }

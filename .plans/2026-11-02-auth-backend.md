@@ -36,6 +36,36 @@ PR B2 (`feat/auth-routes`, branched from B1): done (2026-11-02), pending review 
 - Still open for the Step 3 web work: the Vite proxy (or one shared hostname) in development, and
   copying `csrf_token` into `X-CSRF-Token`.
 
+## Security review of B1 + B2 and the hardening commit (2026-11-02)
+
+The `security-reviewer` agent found no critical or high issues and four medium ones. Each claim was
+reproduced before anything was changed: M2 only deterministically (two open transactions), because
+40 random races never hit the narrow window. Decisions: M3 option A (`__Host-` in production),
+M4 accepted (failures-only limits), fixes in one extra commit on this branch, one PR with three
+commits (core, routes, hardening). Final checks: 648 unit and 446 integration tests.
+
+| #   | Finding                                                                                         | Fix                                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| M1  | A failed first dummy hash was cached forever (unknown emails: 503/500)                          | The failure is forgotten and retried; `warmUp()` makes the hash at startup (`onReady`)                              |
+| M2  | A logout/theft revocation could miss a token inserted by a concurrent rotation (READ COMMITTED) | Per-login advisory lock in rotate and revoke; deterministic and stress tests                                        |
+| M3  | Cookie tossing from a sibling subdomain could log a visitor in as the attacker                  | `__Host-` cookie names in production (Secure, Path=/, no Domain); refresh cookie loses `Path=/auth` there           |
+| M4  | Correct logins used the per-email budget, so anyone could lock an account out                   | Only FAILED logins count: 5 per email+address and 50 per email per 15 min; blocked pair can still sign in elsewhere |
+| L1  | Forged-Origin requests were never counted                                                       | Origin check moved to `preValidation`, after the route-level limiter; log volume left to Step 6                     |
+| L2  | The limiter remembered only 5,000 keys per store, so junk keys reset a victim's counter         | `cache: 50000` on the global limiter and on every route-level and created limiter                                   |
+| L3  | The public placeholder secret passed validation outside production; no variety check            | Placeholder refused unless `NODE_ENV=test`; at least 12 different characters required                               |
+| L4  | Hash gate (4) equalled Node's helper-thread pool (4)                                            | Default lowered to 3                                                                                                |
+| L5  | Step 3 hazards (single origin, path mapping, 401 race handling)                                 | Documented in the README                                                                                            |
+| L6  | A replay after a plain logout was logged as theft                                               | Theft is reported only if the revocation killed a live token                                                        |
+
+Deviation worth knowing: in production the refresh cookie has `Path=/` (the `__Host-` prefix demands
+it). It is still `HttpOnly` and `SameSite=Strict`, and only the auth routes read it.
+The web app must read `__Host-csrf_token` in production and `csrf_token` in development.
+
+Corrections to this plan's own deferred list: the rate-limit library already groups IPv6 clients by
+/64, so only `TRUST_PROXY` (Step 6) is still open for address handling. Denied-request warn lines are
+still written for every refused request, so a flood still produces a log flood: size log retention in
+Step 6.
+
 ## PR B1 outcome notes
 
 - Checks: Biome and `tsc` clean; 631 unit tests (was 362) and 276 integration tests (was 138).

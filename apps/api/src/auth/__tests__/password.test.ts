@@ -248,5 +248,76 @@ describe("createPasswordHasher", () => {
         Promise.all(Array.from({ length: 10 }, (_, i) => hasher.verifyAgainstDummy(`pw-${i}`))),
       ).resolves.toHaveLength(10);
     });
+
+    // A failure of the very first dummy hash (for example a busy server) must not be remembered:
+    // otherwise every unknown email would fail from then on while known emails still answer 401,
+    // and the status code alone would reveal which emails exist.
+    it("recovers when the first dummy hash fails, instead of failing forever", async () => {
+      let calls = 0;
+      const gate: TaskGate = {
+        run: (task) => (++calls === 1 ? Promise.reject(new Error("busy")) : task()),
+      };
+      const flaky = createPasswordHasher({ params: CHEAP, gate });
+
+      await expect(flaky.verifyAgainstDummy("x")).rejects.toThrow("busy");
+      await expect(flaky.verifyAgainstDummy("x")).resolves.toBeUndefined();
+      await expect(flaky.verifyAgainstDummy("x")).resolves.toBeUndefined();
+    });
+
+    it("computes the dummy hash once for simultaneous callers", async () => {
+      let calls = 0;
+      const gate: TaskGate = {
+        run: (task) => {
+          calls++;
+          return task();
+        },
+      };
+      const counted = createPasswordHasher({ params: CHEAP, gate });
+      await Promise.all(Array.from({ length: 5 }, () => counted.verifyAgainstDummy("x")));
+      // One run to make the dummy hash, plus one verify for each of the five callers.
+      expect(calls).toBe(6);
+    });
+  });
+
+  describe("warmUp", () => {
+    it("makes the dummy hash ahead of time, so the first unknown email is not slower", async () => {
+      let calls = 0;
+      const gate: TaskGate = {
+        run: (task) => {
+          calls++;
+          return task();
+        },
+      };
+      const warm = createPasswordHasher({ params: CHEAP, gate });
+
+      await warm.warmUp();
+      expect(calls).toBe(1);
+      await warm.verifyAgainstDummy("x");
+      expect(calls).toBe(2);
+    });
+
+    it("can be called twice and makes the hash only once", async () => {
+      let calls = 0;
+      const gate: TaskGate = {
+        run: (task) => {
+          calls++;
+          return task();
+        },
+      };
+      const warm = createPasswordHasher({ params: CHEAP, gate });
+      await warm.warmUp();
+      await warm.warmUp();
+      expect(calls).toBe(1);
+    });
+
+    it("reports a failure and can be tried again", async () => {
+      let calls = 0;
+      const gate: TaskGate = {
+        run: (task) => (++calls === 1 ? Promise.reject(new Error("busy")) : task()),
+      };
+      const flaky = createPasswordHasher({ params: CHEAP, gate });
+      await expect(flaky.warmUp()).rejects.toThrow("busy");
+      await expect(flaky.warmUp()).resolves.toBeUndefined();
+    });
   });
 });

@@ -11,6 +11,33 @@ function assertWholeNumber(name: string, value: number, min: number, max: number
   }
 }
 
+/** Anything that can run a query: the database itself or a transaction. */
+type Executor = Pick<Database, "execute" | "select">;
+
+async function familyOf(executor: Executor, tokenHash: string): Promise<string | undefined> {
+  const [row] = await executor
+    .select({ familyId: refreshSessions.familyId })
+    .from(refreshSessions)
+    .where(eq(refreshSessions.tokenHash, tokenHash))
+    .limit(1);
+  return row?.familyId;
+}
+
+/**
+ * Makes changes to one login happen one at a time, until the transaction ends.
+ *
+ * Why: under READ COMMITTED a statement only sees rows that were committed before it began. A
+ * logout that starts while a rotation is half done would revoke the old token (once the rotation
+ * commits) but never see the new token, which the rotation inserted after the logout's snapshot.
+ * The new token would then stay alive after a logout that reported success. With the lock, the
+ * later statement starts only after the earlier one has committed.
+ *
+ * Different logins use different keys and never wait for each other.
+ */
+async function lockFamily(executor: Executor, familyId: string): Promise<void> {
+  await executor.execute(sql`select pg_advisory_xact_lock(hashtextextended(${familyId}::text, 0))`);
+}
+
 export interface NewSession {
   readonly userId: string;
   /** All tokens of one login share a family id. */
@@ -106,6 +133,12 @@ export async function rotateSession(db: Database, options: RotateOptions): Promi
   assertWholeNumber("graceSeconds", options.graceSeconds, 0, MAX_GRACE_SECONDS);
 
   return db.transaction(async (tx): Promise<RotateResult> => {
+    // Take this login's lock before anything else, so a logout or a theft revocation that starts
+    // meanwhile waits and then sees the token this rotation is about to add.
+    const familyId = await familyOf(tx, options.tokenHash);
+    if (familyId === undefined) return { status: "invalid" };
+    await lockFamily(tx, familyId);
+
     const [won] = await tx
       .update(refreshSessions)
       .set({ revokedAt: sql`now()` })
@@ -156,10 +189,14 @@ export async function rotateSession(db: Database, options: RotateOptions): Promi
     if (found === undefined || !found.revoked) return { status: "invalid" };
     if (found.within_grace) return { status: "grace" };
 
-    await tx
+    const killed = await tx
       .update(refreshSessions)
       .set({ revokedAt: sql`now()` })
-      .where(and(eq(refreshSessions.familyId, found.family_id), isNull(refreshSessions.revokedAt)));
+      .where(and(eq(refreshSessions.familyId, found.family_id), isNull(refreshSessions.revokedAt)))
+      .returning({ id: refreshSessions.id });
+    // A dead token coming back after an ordinary logout finds nothing alive to revoke. That is
+    // not theft, and reporting it as theft would teach people to ignore the alarm.
+    if (killed.length === 0) return { status: "invalid" };
     return { status: "reuse", userId: found.user_id, familyId: found.family_id };
   });
 }
@@ -169,10 +206,14 @@ export async function rotateSession(db: Database, options: RotateOptions): Promi
  * old one. Returns how many tokens were still live; 0 means there was nothing left to revoke.
  */
 export async function revokeFamilyByToken(db: Database, tokenHash: string): Promise<number> {
-  const result = await db.execute(sql`
-    update refresh_sessions
-    set revoked_at = now()
-    where family_id = (select family_id from refresh_sessions where token_hash = ${tokenHash})
-      and revoked_at is null`);
-  return result.rowCount ?? 0;
+  return db.transaction(async (tx) => {
+    const familyId = await familyOf(tx, tokenHash);
+    if (familyId === undefined) return 0;
+    await lockFamily(tx, familyId);
+    const result = await tx.execute(sql`
+      update refresh_sessions
+      set revoked_at = now()
+      where family_id = ${familyId}::uuid and revoked_at is null`);
+    return result.rowCount ?? 0;
+  });
 }

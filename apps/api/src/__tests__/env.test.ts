@@ -274,9 +274,12 @@ describe("JWT_ACCESS_SECRET", () => {
     expect(() => load("")).toThrow(EnvValidationError);
   });
 
+  // 32 different characters: long enough, and varied enough to pass the entropy rule.
+  const VARIED_32 = "abcdefghijklmnopqrstuvwxyz012345";
+
   it("rejects 31 characters and accepts 32", () => {
-    expect(() => load("a".repeat(31))).toThrow(EnvValidationError);
-    expect(load("a".repeat(32)).JWT_ACCESS_SECRET).toBe("a".repeat(32));
+    expect(() => load(VARIED_32.slice(0, 31))).toThrow(EnvValidationError);
+    expect(load(VARIED_32).JWT_ACCESS_SECRET).toBe(VARIED_32);
   });
 
   it("accepts a long generated secret", () => {
@@ -285,9 +288,9 @@ describe("JWT_ACCESS_SECRET", () => {
   });
 
   it.each([
-    ["a leading space", ` ${"a".repeat(40)}`],
-    ["a trailing space", `${"a".repeat(40)} `],
-    ["a trailing newline", `${"a".repeat(40)}\n`],
+    ["a leading space", ` ${validSecret}`],
+    ["a trailing space", `${validSecret} `],
+    ["a trailing newline", `${validSecret}\n`],
   ])("rejects %s, which is almost always a paste mistake", (_label, value) => {
     expect(() => load(value)).toThrow(EnvValidationError);
   });
@@ -296,10 +299,63 @@ describe("JWT_ACCESS_SECRET", () => {
     expect(() => load(" ".repeat(32))).toThrow(EnvValidationError);
   });
 
-  it("rejects the .env.example placeholder in production only", () => {
-    const placeholder = "change-me-generate-with-openssl-rand-base64-48";
-    expect(() => load(placeholder, "production")).toThrow(EnvValidationError);
-    expect(load(placeholder, "development").JWT_ACCESS_SECRET).toBe(placeholder);
+  describe("variety of characters", () => {
+    it.each([
+      ["one character repeated", "a".repeat(64)],
+      ["two characters repeated", "ab".repeat(32)],
+      ["the ten digits repeated", "0123456789".repeat(5)],
+      ["eleven different characters repeated", "abcdefghijk".repeat(5)],
+    ])("rejects %s", (_label, secret) => {
+      expect(() => load(secret)).toThrow(EnvValidationError);
+    });
+
+    it("accepts exactly 12 different characters", () => {
+      const secret = "abcdefghijkl".repeat(3);
+      expect(load(secret).JWT_ACCESS_SECRET).toBe(secret);
+    });
+
+    it("accepts a random hex string and a random base64 string", () => {
+      const hex = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+      const b64 = "q1W9mZp3Xs8Kd0RvT7yLhB2nFjC5aG4oUe6iNtYxVwPcMbSzAkJrDfHgQlOu";
+      expect(load(hex).JWT_ACCESS_SECRET).toBe(hex);
+      expect(load(b64).JWT_ACCESS_SECRET).toBe(b64);
+    });
+
+    it("does not echo the weak secret in the error", () => {
+      try {
+        load("weakweakweakweakweakweakweakweak");
+        expect.unreachable("loadEnv should have thrown");
+      } catch (error) {
+        expect((error as Error).message).not.toContain("weakweak");
+      }
+    });
+  });
+
+  describe("the placeholder from .env.example", () => {
+    const placeholder = "change-me-generate-a-real-one-before-using-in-production";
+
+    it.each(["development", "production"])("is refused in %s", (env) => {
+      expect(() => load(placeholder, env)).toThrow(EnvValidationError);
+    });
+
+    it("is only accepted in test", () => {
+      expect(load(placeholder, "test").JWT_ACCESS_SECRET).toBe(placeholder);
+    });
+
+    it("is refused in any capitalisation", () => {
+      expect(() => load(placeholder.toUpperCase(), "development")).toThrow(EnvValidationError);
+    });
+
+    it("explains what to do without echoing the value", () => {
+      try {
+        load(placeholder, "development");
+        expect.unreachable("loadEnv should have thrown");
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(message).toContain("JWT_ACCESS_SECRET");
+        expect(message).not.toContain("before-using");
+      }
+    });
   });
 
   it("accepts a real secret in production", () => {

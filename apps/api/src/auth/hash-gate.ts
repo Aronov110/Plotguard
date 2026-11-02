@@ -16,7 +16,9 @@ export class HashGate {
   readonly #queue: Waiting[] = [];
   #running = 0;
 
-  constructor(maxConcurrent = 4, maxQueue = 50) {
+  // The default is 3, not 4: Node's helper-thread pool has 4 threads by default, and the hashes
+  // run on it. Four at once would leave no thread for files, DNS or random bytes.
+  constructor(maxConcurrent = 3, maxQueue = 50) {
     if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) {
       throw new RangeError("maxConcurrent must be a whole number of at least 1");
     }

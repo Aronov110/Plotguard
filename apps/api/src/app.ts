@@ -68,9 +68,21 @@ export function buildApp(env: Env, deps: AppDependencies): FastifyInstance {
     await deps.database.close();
   });
 
+  const hasher = deps.passwordHasher ?? createPasswordHasher({ gate: new HashGate() });
+  // Make the dummy hash (used for unknown emails) before the first request, so that the first
+  // login for an unknown email is not slower than the others. A failure here is not fatal: the
+  // hasher tries again on first use.
+  app.addHook("onReady", async () => {
+    try {
+      await hasher.warmUp();
+    } catch (error) {
+      app.log.error({ err: error }, "Could not prepare the password hasher at startup");
+    }
+  });
+
   const auth = createAuthService({
     db: deps.database.db,
-    hasher: deps.passwordHasher ?? createPasswordHasher({ gate: new HashGate() }),
+    hasher,
     accessTokens: createAccessTokens({
       secret: env.JWT_ACCESS_SECRET,
       ttlSeconds: env.ACCESS_TOKEN_TTL_SECONDS,

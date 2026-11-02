@@ -7,6 +7,14 @@ import { RateLimitError } from "../errors/app-error.ts";
 import { notFoundHandler } from "../errors/error-handler.ts";
 
 /**
+ * How many different keys (clients, emails) each rate limiter remembers. The library's default is
+ * 5,000: anyone able to send that many different keys could push a victim's counter out of memory
+ * and start again from zero. 50,000 keys cost a few megabytes. Every limiter needs this set itself,
+ * because each route-level limiter has a store of its own.
+ */
+export const RATE_LIMIT_CACHE_SIZE = 50_000;
+
+/**
  * Registers security headers, the CORS allowlist and the global rate limit.
  * Call before registering routes so the hooks apply to all of them.
  *
@@ -30,6 +38,7 @@ export function registerSecurity(app: FastifyInstance, env: Env): void {
     global: true,
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_WINDOW_SECONDS * 1000,
+    cache: RATE_LIMIT_CACHE_SIZE,
     // The store is in memory, so limits are per process. A shared store comes with scaling out.
     errorResponseBuilder: (_request, context) => new RateLimitError(context.ttl / 1000),
   });

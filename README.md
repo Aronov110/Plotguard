@@ -59,13 +59,31 @@ All under `/auth`; the full reference is at `/docs/`.
 | `POST /auth/logout`   | `Origin`, `refresh_token` cookie, `X-CSRF-Token` header | 204, cookies cleared               |
 | `GET /auth/me`        | `Authorization: Bearer <access token>`                  | the signed-in user                 |
 
-The access token lives in memory only. The refresh token is an `httpOnly`, `SameSite=Strict` cookie
-scoped to `/auth`. The web app copies the `csrf_token` cookie into the `X-CSRF-Token` header.
+The access token lives in memory only. The refresh token is an `httpOnly`, `SameSite=Strict` cookie.
+The web app copies the CSRF cookie into the `X-CSRF-Token` header.
 
-In development the web app and the API must be reached through the **same hostname**. `localhost`
-and `127.0.0.1` count as different sites, so a `SameSite=Strict` cookie is not sent between them.
-Use `localhost` for both, or have the Vite dev server proxy `/api` so the browser sees one origin.
-Never loosen the cookie to `SameSite=None` to work around this.
+| Cookie  | Development     | Production (`NODE_ENV=production`) |
+| ------- | --------------- | ---------------------------------- |
+| refresh | `refresh_token` | `__Host-refresh_token`             |
+| CSRF    | `csrf_token`    | `__Host-csrf_token`                |
+
+In production both names start with `__Host-`: browsers then accept the cookie only if it is
+`Secure`, has `Path=/` and no `Domain`, and refuse one set by another host, so a sibling subdomain
+cannot plant its own login cookies in a visitor's browser. Development uses the plain names (and
+`Path=/auth` for the refresh cookie) because browsers refuse `Secure` cookies over plain http.
+
+Rules for the web app (Step 3):
+
+- **One origin.** The API must be reached from the same host as the page, behind a reverse proxy
+  (the Vite dev server in development). The page can only read the CSRF cookie of its own host,
+  and a `SameSite=Strict` cookie is not sent between `localhost` and `127.0.0.1`. Never loosen the
+  cookie to `SameSite=None` or add a `Domain` to work around this.
+- **Keep the path.** If the proxy mounts the API under a prefix such as `/api`, map it so that the
+  routes are still seen as `/auth/...` by the browser's cookie rules in development.
+- **A 401 from `/auth/refresh` is not always "signed out".** A tab that loses a refresh race gets a
+  401 although another tab just renewed the login. Re-read the cookie and retry once after a short
+  wait before showing the sign-in page.
+- Send `POST /auth/refresh` and `/auth/logout` with **no body and no content type**.
 
 ## Checks
 

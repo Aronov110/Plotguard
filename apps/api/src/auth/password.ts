@@ -84,6 +84,11 @@ export interface PasswordHasher {
    * not exist, so an attacker cannot tell them apart from real ones by how long the answer takes.
    */
   verifyAgainstDummy(plain: string): Promise<void>;
+  /**
+   * Makes the dummy hash now. Call it at startup so that the first unknown email is not slower
+   * than the rest. Rejects if it fails; calling it again tries again.
+   */
+  warmUp(): Promise<void>;
 }
 
 export interface PasswordHasherOptions {
@@ -98,6 +103,19 @@ export function createPasswordHasher(options: PasswordHasherOptions = {}): Passw
 
   const hash = (plain: string): Promise<string> =>
     gate.run(() => argon2.hash(normalizePassword(plain), { ...params }));
+
+  /**
+   * The dummy hash is made once and shared. A FAILED attempt is forgotten, so the next caller
+   * tries again: remembering a failure (say, from a busy moment) would make every unknown email
+   * fail from then on, while known emails still answered 401, and that would reveal which exist.
+   */
+  const getDummyHash = (): Promise<string> => {
+    dummyHash ??= hash("plotpal timing dummy password").catch((error: unknown) => {
+      dummyHash = undefined;
+      throw error;
+    });
+    return dummyHash;
+  };
 
   const verify = (stored: string, plain: string): Promise<boolean> =>
     gate.run(async () => {
@@ -129,8 +147,11 @@ export function createPasswordHasher(options: PasswordHasherOptions = {}): Passw
     },
 
     async verifyAgainstDummy(plain) {
-      dummyHash ??= hash("plotpal timing dummy password");
-      await verify(await dummyHash, plain);
+      await verify(await getDummyHash(), plain);
+    },
+
+    async warmUp() {
+      await getDummyHash();
     },
   };
 }

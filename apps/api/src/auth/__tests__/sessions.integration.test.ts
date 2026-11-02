@@ -308,6 +308,23 @@ describe("refresh sessions", () => {
         expect(["grace", "reuse"]).toContain(result.status);
         await expect(findLiveSession(db(), tokenHash)).resolves.toBeUndefined();
       });
+
+      // A theft alarm that also rings after every ordinary logout would teach people to ignore it.
+      it("is not reported as theft when the login was already fully ended", async () => {
+        const { tokenHash } = await start();
+        await revokeFamilyByToken(db(), tokenHash);
+        await revokedSecondsAgo(tokenHash, 600);
+        await expect(rotate(tokenHash)).resolves.toEqual({ status: "invalid" });
+      });
+
+      it("is still theft when a newer token of the login is alive", async () => {
+        const { tokenHash } = await start();
+        const next = hash();
+        await rotate(tokenHash, next);
+        await revokedSecondsAgo(tokenHash, 600);
+        await expect(rotate(tokenHash)).resolves.toMatchObject({ status: "reuse" });
+        await expect(findLiveSession(db(), next)).resolves.toBeUndefined();
+      });
     });
 
     describe("two requests with the same token at the same moment", () => {
@@ -401,6 +418,96 @@ describe("refresh sessions", () => {
       const { tokenHash } = await start();
       await expect(rotate(tokenHash, hash(), policy)).rejects.toThrow(RangeError);
       await expect(findLiveSession(db(), tokenHash)).resolves.toBeDefined();
+    });
+  });
+
+  // Under READ COMMITTED a statement only sees rows committed before it began. A logout that
+  // starts while a rotation is half done would revoke the old token (once the rotation commits) but
+  // never see the new one, which is invisible to it. Both therefore take a per-login lock first.
+  describe("changes to one login happen one at a time", () => {
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    /** Holds the login's lock in a transaction of its own, the way a running rotation would. */
+    async function holdLock(familyId: string) {
+      const client = await handle.pool.connect();
+      await client.query("begin");
+      await client.query("select pg_advisory_xact_lock(hashtextextended($1::text, 0))", [familyId]);
+      return {
+        async release() {
+          await client.query("commit");
+          client.release();
+        },
+      };
+    }
+
+    it("a rotation waits while the login is locked, then goes ahead", async () => {
+      const { tokenHash, familyId } = await start();
+      const lock = await holdLock(familyId);
+      let finished = false;
+      const pending = rotate(tokenHash).then((result) => {
+        finished = true;
+        return result;
+      });
+      await sleep(300);
+      expect(finished).toBe(false);
+      await lock.release();
+      await expect(pending).resolves.toMatchObject({ status: "rotated" });
+    });
+
+    it("a logout waits while the login is locked, then goes ahead", async () => {
+      const { tokenHash, familyId } = await start();
+      const lock = await holdLock(familyId);
+      let finished = false;
+      const pending = revokeFamilyByToken(db(), tokenHash).then((count) => {
+        finished = true;
+        return count;
+      });
+      await sleep(300);
+      expect(finished).toBe(false);
+      await lock.release();
+      await expect(pending).resolves.toBe(1);
+    });
+
+    it("does not make other logins wait", async () => {
+      const busy = await start();
+      const other = await start();
+      const lock = await holdLock(busy.familyId);
+      const started = Date.now();
+      await expect(rotate(other.tokenHash)).resolves.toMatchObject({ status: "rotated" });
+      expect(Date.now() - started).toBeLessThan(250);
+      await lock.release();
+    });
+
+    it("an unknown token needs no lock and answers at once", async () => {
+      const { familyId } = await start();
+      const lock = await holdLock(familyId);
+      await expect(revokeFamilyByToken(db(), hash())).resolves.toBe(0);
+      await expect(rotate(hash())).resolves.toEqual({ status: "invalid" });
+      await lock.release();
+    });
+
+    it("leaves no live token behind when a logout and a rotation race, in either order", async () => {
+      for (let i = 0; i < 40; i++) {
+        const { tokenHash, familyId } = await start();
+        await Promise.all([rotate(tokenHash), revokeFamilyByToken(db(), tokenHash)]);
+        const live = (await rows(familyId)).filter((r) => r.revokedAt === null);
+        expect(live, `race ${i}`).toHaveLength(0);
+      }
+    });
+
+    it("leaves no live token behind when theft is detected while a rotation runs", async () => {
+      for (let i = 0; i < 25; i++) {
+        const { tokenHash, familyId } = await start();
+        const next = hash();
+        await rotate(tokenHash, next);
+        await revokedSecondsAgo(tokenHash, 600);
+        // The old token comes back (theft) at the same moment the real user rotates the new one.
+        await Promise.all([rotate(tokenHash), rotate(next)]);
+        const live = (await rows(familyId)).filter((r) => r.revokedAt === null);
+        // Either the thief won and the login is dead, or the user's rotation finished first and
+        // the thief's replay then revoked it. In both orders nothing may stay alive.
+        expect(live, `race ${i}`).toHaveLength(0);
+      }
     });
   });
 

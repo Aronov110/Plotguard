@@ -17,6 +17,23 @@ function controlledTask<T>(result: T) {
 }
 
 describe("HashGate", () => {
+  it("by default runs 3 at a time: Node's helper-thread pool has 4 threads, and one must stay free", async () => {
+    const gate = new HashGate();
+    let running = 0;
+    let peak = 0;
+    await Promise.all(
+      Array.from({ length: 12 }, () =>
+        gate.run(async () => {
+          running++;
+          peak = Math.max(peak, running);
+          await new Promise((resolve) => setTimeout(resolve, 3));
+          running--;
+        }),
+      ),
+    );
+    expect(peak).toBe(3);
+  });
+
   it("returns the result of the task", async () => {
     const gate = new HashGate(2, 5);
     await expect(gate.run(async () => 42)).resolves.toBe(42);

@@ -106,7 +106,8 @@ describe("POST /auth/register", () => {
         payload: { email: "mara@example.com", password: PASSWORD },
       });
       expect(response.statusCode).toBe(201);
-      for (const name of ["refresh_token", "csrf_token"]) {
+      // In production the cookies get the __Host- prefix. See auth-production-cookies.
+      for (const name of ["__Host-refresh_token", "__Host-csrf_token"]) {
         expect(findCookie(response, name)?.attributes).toHaveProperty("secure", true);
       }
     });
@@ -459,8 +460,10 @@ describe("POST /auth/login", () => {
       expect((await attempt("10.1.0.1")).statusCode).toBe(429);
     });
 
-    it("also limits attempts on one email address, from any address", async () => {
-      t = await buildAuthTestApp({ limits: { loginPerEmail: { max: 3, windowSeconds: 60 } } });
+    it("also limits FAILED attempts on one email address, from any address", async () => {
+      t = await buildAuthTestApp({
+        limits: { loginFailuresPerEmail: { max: 3, windowSeconds: 60 } },
+      });
       const attempt = (ip: string, email = "mara@example.com") =>
         t.app.inject({
           method: "POST",
@@ -477,7 +480,9 @@ describe("POST /auth/login", () => {
     });
 
     it("counts spelling variants of one email together", async () => {
-      t = await buildAuthTestApp({ limits: { loginPerEmail: { max: 2, windowSeconds: 60 } } });
+      t = await buildAuthTestApp({
+        limits: { loginFailuresPerEmail: { max: 2, windowSeconds: 60 } },
+      });
       const attempt = (email: string, ip: string) =>
         t.app.inject({
           method: "POST",
@@ -489,6 +494,159 @@ describe("POST /auth/login", () => {
       expect((await attempt("mara@example.com", "10.3.0.1")).statusCode).toBe(401);
       expect((await attempt("MARA@Example.com", "10.3.0.2")).statusCode).toBe(401);
       expect((await attempt("  mara@example.com ", "10.3.0.3")).statusCode).toBe(429);
+    });
+
+    // The old design counted every login, so a user's own successful logins used up the budget and
+    // anyone who knew an address could keep that account locked out with a handful of requests.
+    describe("what counts towards the per-email limits", () => {
+      const attempt = (ip: string, email: string, password: string) =>
+        t.app.inject({
+          method: "POST",
+          url: "/auth/login",
+          remoteAddress: ip,
+          headers: { origin: ORIGIN },
+          payload: { email, password },
+        });
+
+      it("does not count correct logins, so the owner can sign in from many devices", async () => {
+        t = await buildAuthTestApp({
+          limits: { loginFailuresPerEmail: { max: 2, windowSeconds: 900 } },
+        });
+        await signUp(t.app);
+        const statuses: number[] = [];
+        for (let i = 1; i <= 6; i++) {
+          statuses.push((await attempt(`10.4.0.${i}`, "mara@example.com", PASSWORD)).statusCode);
+        }
+        expect(statuses).toEqual([200, 200, 200, 200, 200, 200]);
+        // And the budget is untouched: two failures are still allowed.
+        const wrong = "wrong password 123";
+        expect((await attempt("10.4.1.1", "mara@example.com", wrong)).statusCode).toBe(401);
+        expect((await attempt("10.4.1.2", "mara@example.com", wrong)).statusCode).toBe(401);
+        expect((await attempt("10.4.1.3", "mara@example.com", wrong)).statusCode).toBe(429);
+      });
+
+      it("blocks one email from one address after repeated failures, but not from other addresses", async () => {
+        t = await buildAuthTestApp({
+          limits: { loginFailuresPerEmailAndIp: { max: 2, windowSeconds: 900 } },
+        });
+        await signUp(t.app);
+        const wrong = "wrong password 123";
+        expect((await attempt("10.5.0.1", "mara@example.com", wrong)).statusCode).toBe(401);
+        expect((await attempt("10.5.0.1", "mara@example.com", wrong)).statusCode).toBe(401);
+        // The pair is now blocked, even for the right password...
+        const blocked = await attempt("10.5.0.1", "mara@example.com", PASSWORD);
+        expect(blocked.statusCode).toBe(429);
+        expect(blocked.headers["content-type"]).toMatch(PROBLEM);
+        expect(Number(blocked.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+        // ...but the owner, on another address, can still sign in.
+        expect((await attempt("10.5.0.2", "mara@example.com", PASSWORD)).statusCode).toBe(200);
+        // And the same address can still try other emails.
+        expect((await attempt("10.5.0.1", "other@example.com", wrong)).statusCode).toBe(401);
+      });
+
+      it("counts failures for an email that does not exist exactly like those for one that does", async () => {
+        t = await buildAuthTestApp({
+          limits: { loginFailuresPerEmail: { max: 2, windowSeconds: 900 } },
+        });
+        await signUp(t.app);
+        const known: number[] = [];
+        const unknown: number[] = [];
+        for (let i = 1; i <= 3; i++) {
+          known.push(
+            (await attempt(`10.6.0.${i}`, "mara@example.com", "wrong password 123")).statusCode,
+          );
+          unknown.push(
+            (await attempt(`10.6.1.${i}`, "ghost@example.com", "wrong password 123")).statusCode,
+          );
+        }
+        expect(known).toEqual([401, 401, 429]);
+        expect(unknown).toEqual(known);
+      });
+
+      it("counts a refused password that breaks the sign-up rules as a failure too", async () => {
+        t = await buildAuthTestApp({
+          limits: { loginFailuresPerEmail: { max: 1, windowSeconds: 900 } },
+        });
+        expect((await attempt("10.7.0.1", "mara@example.com", "a".repeat(129))).statusCode).toBe(
+          401,
+        );
+        expect((await attempt("10.7.0.2", "mara@example.com", "a".repeat(129))).statusCode).toBe(
+          429,
+        );
+      });
+
+      it("does not count a request that was refused before the password was checked", async () => {
+        t = await buildAuthTestApp({
+          limits: { loginFailuresPerEmail: { max: 1, windowSeconds: 900 } },
+        });
+        await signUp(t.app);
+        await post("/auth/login", { email: "mara@example.com" }); // 400: no password
+        await t.app.inject({
+          method: "POST",
+          url: "/auth/login",
+          headers: { origin: "https://evil.example.com" },
+          payload: { email: "mara@example.com", password: "wrong password 123" },
+        }); // 403: wrong origin
+        expect((await attempt("10.8.0.1", "mara@example.com", PASSWORD)).statusCode).toBe(200);
+      });
+
+      it("keeps counting after thousands of other emails have been tried", async () => {
+        t = await buildAuthTestApp({
+          limits: { loginFailuresPerEmail: { max: 2, windowSeconds: 900 } },
+        });
+        const wrong = "wrong password 123";
+        await attempt("10.9.0.1", "victim@example.com", wrong);
+        await attempt("10.9.0.2", "victim@example.com", wrong);
+        expect((await attempt("10.9.0.3", "victim@example.com", wrong)).statusCode).toBe(429);
+
+        // The limiter's memory used to hold only 5,000 keys: more junk emails pushed the victim's
+        // counter out and gave an attacker a fresh start.
+        for (let batch = 0; batch < 110; batch++) {
+          await Promise.all(
+            Array.from({ length: 50 }, (_, i) =>
+              attempt(`10.10.${batch}.${i + 1}`, `filler${batch}-${i}@example.com`, wrong),
+            ),
+          );
+        }
+        expect((await attempt("10.9.0.4", "victim@example.com", wrong)).statusCode).toBe(429);
+      }, 120_000);
+    });
+
+    // The Origin check used to run before the rate limiter, so forged requests were never counted.
+    describe("requests with a wrong Origin", () => {
+      const forged = (ip = "127.0.0.1") =>
+        t.app.inject({
+          method: "POST",
+          url: "/auth/login",
+          remoteAddress: ip,
+          headers: { origin: "https://evil.example.com" },
+          payload: { email: "a@example.com", password: PASSWORD },
+        });
+
+      it("are counted against the address limit like any other", async () => {
+        t = await buildAuthTestApp({ limits: { login: { max: 2, windowSeconds: 60 } } });
+        const statuses: number[] = [];
+        for (let i = 0; i < 5; i++) statuses.push((await forged()).statusCode);
+        expect(statuses).toEqual([403, 403, 429, 429, 429]);
+      });
+
+      it("use up only the budget of the address they come from", async () => {
+        t = await buildAuthTestApp({ limits: { login: { max: 1, windowSeconds: 60 } } });
+        await forged("10.11.0.1");
+        const other = await t.app.inject({
+          method: "POST",
+          url: "/auth/login",
+          remoteAddress: "10.11.0.2",
+          headers: { origin: ORIGIN },
+          payload: { email: "a@example.com", password: PASSWORD },
+        });
+        expect(other.statusCode).toBe(401);
+      });
+
+      it("still get 403, not a validation error, when the body is fine", async () => {
+        t = await buildAuthTestApp();
+        expect((await forged()).statusCode).toBe(403);
+      });
     });
 
     it("limits sign-ups per address", async () => {

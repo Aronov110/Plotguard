@@ -19,7 +19,8 @@ const GENEROUS = { max: 100_000, windowSeconds: 60 } as const;
 export const NO_LIMITS: AuthLimits = {
   register: GENEROUS,
   login: GENEROUS,
-  loginPerEmail: GENEROUS,
+  loginFailuresPerEmailAndIp: GENEROUS,
+  loginFailuresPerEmail: GENEROUS,
   refresh: GENEROUS,
   logout: GENEROUS,
 };
@@ -113,6 +114,11 @@ export class CookieJar {
   }
 }
 
+/** The CSRF code from the jar, under the plain name (development) or the __Host- name (production). */
+export function csrfOf(jar: CookieJar): string {
+  return jar.get("csrf_token") ?? jar.get("__Host-csrf_token") ?? "";
+}
+
 export interface SessionJson {
   user: { id: string; email: string; displayName: string | null };
   accessToken: string;
@@ -160,7 +166,7 @@ export function refresh(
     headers: {
       origin: ORIGIN,
       cookie: jar.header,
-      "x-csrf-token": jar.get("csrf_token") ?? "",
+      "x-csrf-token": csrfOf(jar),
       ...overrides,
     },
   });
@@ -177,7 +183,7 @@ export function logOut(
     headers: {
       origin: ORIGIN,
       cookie: jar.header,
-      "x-csrf-token": jar.get("csrf_token") ?? "",
+      "x-csrf-token": csrfOf(jar),
       ...overrides,
     },
   });

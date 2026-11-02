@@ -72,6 +72,7 @@ describe("auth service", () => {
         verify: vi.fn(hasher.verify),
         needsRehash: vi.fn(hasher.needsRehash),
         verifyAgainstDummy: vi.fn(hasher.verifyAgainstDummy),
+        warmUp: vi.fn(hasher.warmUp),
       } satisfies PasswordHasher,
     };
   }
