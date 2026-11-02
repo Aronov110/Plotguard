@@ -7,6 +7,7 @@ import {
   type SessionResponse,
 } from "../api/auth-api.ts";
 import { ApiError, NetworkError } from "../api/problem.ts";
+import { type AuthBroadcast, createAuthBroadcast } from "./auth-channel.ts";
 import { readCsrfToken } from "./csrf-cookie.ts";
 import { clearAccessToken, setAccessToken } from "./token-store.ts";
 
@@ -16,6 +17,15 @@ const REFRESH_LEAD_MS = 60_000;
 const SHORT_TOKEN_MS = 2 * REFRESH_LEAD_MS;
 /** How long to wait before retrying a refresh that lost a race against another tab. */
 const RACE_WAIT_MS = 300;
+/** The first wait after a refresh failed for a passing reason; it doubles up to the maximum. */
+const RETRY_BASE_MS = 5000;
+const RETRY_MAX_MS = 60_000;
+/**
+ * The longest delay a browser timer holds (a signed 32-bit number of milliseconds, about 24.8
+ * days). A longer one overflows and fires at once, which would make a very long-lived token
+ * refresh in a tight loop. Firing early is harmless: the refresh just schedules the next one.
+ */
+const MAX_TIMER_MS = 2_147_483_647;
 
 export type SessionState =
   | { readonly status: "loading" }
@@ -32,6 +42,8 @@ export interface SessionManagerDeps {
   readonly wait: (ms: number) => Promise<void>;
   /** Receives failures nobody expected (a bug, an API answer in the wrong shape). */
   readonly reportError: (error: unknown) => void;
+  /** The link to the other tabs of this browser. */
+  readonly broadcast: AuthBroadcast;
 }
 
 export interface SessionManager {
@@ -41,48 +53,61 @@ export interface SessionManager {
   subscribe(listener: () => void): () => void;
   /**
    * Starts the session: restores a login from the cookies, or re-arms the refresh timer after
-   * {@link SessionManager.stop}. Safe to call several times. Never rejects.
+   * {@link SessionManager.stop}. Also starts listening for a sign-out in another tab. Safe to call
+   * several times. Never rejects.
    */
   start(): Promise<void>;
-  /** Cancels the refresh timer, for example when the page unmounts. */
+  /** Cancels the refresh timer and stops listening to other tabs, for example when the page unmounts. */
   stop(): void;
   /** @throws ApiError, NetworkError or ResponseShapeError; the state does not change then. */
   login(input: LoginInput): Promise<void>;
   /** @throws ApiError, NetworkError or ResponseShapeError; the state does not change then. */
   register(input: RegisterInput): Promise<void>;
   /**
-   * Signs out on this page at once, then tells the server.
+   * Signs out on this page at once, tells the other tabs, then tells the server.
    * @returns whether the server confirmed. `false` means the login cookie may still be valid.
    */
   signOut(): Promise<boolean>;
   /**
-   * Renews the access token. At most one request runs at a time, however many callers ask.
+   * Renews the access token. At most one request runs at a time per login, however many callers
+   * ask. Does nothing once the person has signed out.
    * @returns whether a new token was obtained. Never rejects for expected failures.
    */
   refresh(): Promise<boolean>;
   /**
    * Runs an API call that needs the access token. If it fails with a 401 (the token expired, for
-   * example because a background tab's timer was slowed down) it renews the token and tries once more.
+   * example because a background tab's timer was slowed down) it renews the token and tries once
+   * more. Every call that needs the token should go through here.
    */
   withAuth<T>(call: () => Promise<T>): Promise<T>;
 }
 
+/**
+ * How a refresh ended: `ok` (new token), `refused` (the server ended this login), `transient` (no
+ * answer or a server problem, worth trying again) or `stale` (the login changed meanwhile, so the
+ * answer was thrown away).
+ */
+type RefreshOutcome = "ok" | "refused" | "transient" | "stale";
+
 const LOADING: SessionState = { status: "loading" };
 const SIGNED_OUT: SessionState = { status: "signed-out" };
 
-const defaultDeps: SessionManagerDeps = {
-  api: authApi,
-  readCsrf: () => readCsrfToken(),
-  now: () => Date.now(),
-  setTimer: (callback, ms) => {
-    const id = setTimeout(callback, ms);
-    return () => clearTimeout(id);
-  },
-  wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  reportError: (error) => {
-    console.error(error);
-  },
-};
+function defaultDeps(): SessionManagerDeps {
+  return {
+    api: authApi,
+    readCsrf: () => readCsrfToken(),
+    now: () => Date.now(),
+    setTimer: (callback, ms) => {
+      const id = setTimeout(callback, ms);
+      return () => clearTimeout(id);
+    },
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    reportError: (error) => {
+      console.error(error);
+    },
+    broadcast: createAuthBroadcast(),
+  };
+}
 
 /** Failures that are part of normal life: the answer was an error, or there was no answer. */
 function isExpected(error: unknown): boolean {
@@ -98,13 +123,6 @@ function sameUser(a: PublicUser, b: PublicUser): boolean {
   return a.id === b.id && a.email === b.email && a.displayName === b.displayName;
 }
 
-/**
- * The longest delay a browser timer holds (a signed 32-bit number of milliseconds, about 24.8
- * days). A longer one overflows and fires at once, which would make a very long-lived token
- * refresh in a tight loop. Firing early is harmless: the refresh just schedules the next one.
- */
-const MAX_TIMER_MS = 2_147_483_647;
-
 /** When to refresh, given how long the token still lives. Never sooner than half its life. */
 function refreshDelay(remainingMs: number): number {
   if (remainingMs <= 0) return 0;
@@ -118,17 +136,19 @@ function refreshDelay(remainingMs: number): number {
  * tested without a browser; `session.tsx` connects it to React.
  */
 export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}): SessionManager {
-  const deps: SessionManagerDeps = { ...defaultDeps, ...overrides };
+  const deps: SessionManagerDeps = { ...defaultDeps(), ...overrides };
   const listeners = new Set<() => void>();
 
   let state: SessionState = LOADING;
   let running = false;
   let expiresAt = 0;
   let cancelTimer: (() => void) | undefined;
+  let stopListening: (() => void) | undefined;
   let restoring: Promise<void> | undefined;
-  let refreshing: Promise<boolean> | undefined;
+  let refreshing: { readonly epoch: number; readonly promise: Promise<RefreshOutcome> } | undefined;
   // Counts "the login changed under you" events (sign-out, a new login). A refresh that started
-  // before one of them must not bring the old login back to life when its answer arrives.
+  // before one of them must not bring the old login back to life when its answer arrives, and a
+  // caller that comes after one must not wait for a refresh that belongs to the old login.
   let epoch = 0;
 
   function setState(next: SessionState): void {
@@ -147,10 +167,26 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
     if (!running) return;
     cancelTimer = deps.setTimer(
       () => {
-        refresh().catch(deps.reportError);
+        runScheduledRefresh(0).catch(deps.reportError);
       },
       refreshDelay(expiresAt - deps.now()),
     );
+  }
+
+  /**
+   * The refresh the timer starts. When it fails for a passing reason (a laptop waking up offline,
+   * a server restart) it tries again after 5 seconds, then 10, 20, 40 and every minute, for as long
+   * as this login lasts. A success schedules the normal next refresh instead (see `applySession`).
+   */
+  async function runScheduledRefresh(failures: number): Promise<void> {
+    const startedIn = epoch;
+    const outcome = await attempt();
+    if (outcome !== "transient" || !running || epoch !== startedIn) return;
+    if (state.status !== "signed-in") return;
+    const wait = Math.min(RETRY_BASE_MS * 2 ** failures, RETRY_MAX_MS);
+    cancelTimer = deps.setTimer(() => {
+      runScheduledRefresh(failures + 1).catch(deps.reportError);
+    }, wait);
   }
 
   function applySession(session: SessionResponse): void {
@@ -170,6 +206,11 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
     setState(SIGNED_OUT);
   }
 
+  function beginSession(session: SessionResponse): void {
+    epoch++;
+    applySession(session);
+  }
+
   async function requestRefresh(): Promise<SessionResponse> {
     try {
       return await deps.api.refresh();
@@ -183,11 +224,14 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
     }
   }
 
-  async function doRefresh(): Promise<boolean> {
+  async function doRefresh(): Promise<RefreshOutcome> {
+    // Nobody is signed in (or the person just signed out, possibly while the logout request is
+    // still travelling and the cookies are still valid): never start a login from here.
+    if (state.status === "signed-out") return "stale";
     // Without the CSRF cookie the server would refuse the request, and it means there is no login.
     if (deps.readCsrf() === undefined) {
       endSession();
-      return false;
+      return "refused";
     }
 
     const startedIn = epoch;
@@ -195,35 +239,42 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
     try {
       session = await requestRefresh();
     } catch (error) {
-      if (epoch === startedIn && isRefused(error)) endSession();
       if (!isExpected(error)) throw error;
-      return false;
+      if (epoch !== startedIn) return "stale";
+      if (isRefused(error)) {
+        endSession();
+        return "refused";
+      }
+      return "transient";
     }
 
-    if (epoch !== startedIn) return false;
+    if (epoch !== startedIn) return "stale";
     applySession(session);
-    return true;
+    return "ok";
   }
 
-  function refresh(): Promise<boolean> {
-    refreshing ??= doRefresh().finally(() => {
-      refreshing = undefined;
+  /** Starts a refresh, or joins the one that is already running for this same login. */
+  function attempt(): Promise<RefreshOutcome> {
+    if (refreshing !== undefined && refreshing.epoch === epoch) return refreshing.promise;
+    const promise: Promise<RefreshOutcome> = doRefresh().finally(() => {
+      if (refreshing?.promise === promise) refreshing = undefined;
     });
-    return refreshing;
+    refreshing = { epoch, promise };
+    return promise;
   }
 
   async function restore(): Promise<void> {
     try {
-      await refresh();
+      await attempt();
     } catch (error) {
       deps.reportError(error);
     }
     if (state.status === "loading") setState(SIGNED_OUT);
   }
 
-  function beginSession(session: SessionResponse): void {
-    epoch++;
-    applySession(session);
+  /** Another tab signed out. This tab's access token would still work for a while: end it now. */
+  function onOtherTabSignedOut(): void {
+    if (state.status !== "signed-out") endSession();
   }
 
   return {
@@ -238,6 +289,7 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
 
     start() {
       running = true;
+      stopListening ??= deps.broadcast.onSignOut(onOtherTabSignedOut);
       if (state.status === "loading") {
         restoring ??= restore();
         return restoring;
@@ -249,6 +301,8 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
     stop() {
       running = false;
       cancelSchedule();
+      stopListening?.();
+      stopListening = undefined;
     },
 
     async login(input) {
@@ -261,8 +315,14 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
 
     async signOut() {
       // Sign out on this page first: the person pressed the button, so the screen must not keep
-      // showing their private pages while the request travels.
+      // showing their private pages while the request travels. The other tabs hear about it at
+      // once too; they would otherwise keep working until their own token expires.
       endSession();
+      try {
+        deps.broadcast.announceSignOut();
+      } catch (error) {
+        deps.reportError(error);
+      }
       try {
         await deps.api.logout();
         return true;
@@ -272,14 +332,16 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
       }
     },
 
-    refresh,
+    async refresh() {
+      return (await attempt()) === "ok";
+    },
 
     async withAuth<T>(call: () => Promise<T>): Promise<T> {
       try {
         return await call();
       } catch (error) {
         if (!(error instanceof ApiError) || error.status !== 401) throw error;
-        if (!(await refresh())) throw error;
+        if ((await attempt()) !== "ok") throw error;
         // One retry only. A second 401 is thrown as it is: no loops.
         return call();
       }

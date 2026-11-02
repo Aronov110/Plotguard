@@ -141,6 +141,108 @@ describe("readProblem", () => {
   });
 });
 
+describe("readProblem: untrusted text", () => {
+  it("cuts a long field message at 300 characters", async () => {
+    const error = await readProblem(
+      problem({ errors: [{ pointer: "/email", message: "x".repeat(5000) }] }),
+    );
+    expect(error.issues[0]?.message).toHaveLength(300);
+  });
+
+  it("cuts a long pointer at 200 characters", async () => {
+    const error = await readProblem(
+      problem({ errors: [{ pointer: `/${"p".repeat(5000)}`, message: "bad" }] }),
+    );
+    expect(error.issues[0]?.pointer).toHaveLength(200);
+  });
+
+  it("cuts a long detail at 500 characters", async () => {
+    const error = await readProblem(problem({ detail: "d".repeat(5000) }));
+    expect(error.detail).toHaveLength(500);
+  });
+
+  it("does not cut a normal message", async () => {
+    const message = "Use at least 12 characters, with spaces if you like.";
+    const error = await readProblem(problem({ errors: [{ pointer: "/password", message }] }));
+    expect(error.issues[0]?.message).toBe(message);
+  });
+
+  it("does not split an emoji when it cuts", async () => {
+    const error = await readProblem(
+      problem({ errors: [{ pointer: "/a", message: "😀".repeat(400) }] }),
+    );
+    expect(error.issues[0]?.message).toBe("😀".repeat(300));
+  });
+
+  it("turns line breaks, tabs and other control characters into spaces", async () => {
+    const error = await readProblem(
+      problem({
+        detail: "line one\nline two\r\n\tindented\u0000\u001b[31mred",
+        errors: [{ pointer: "/a", message: "first\nsecond" }],
+      }),
+    );
+    expect(error.detail).toBe("line one line two   indented  [31mred");
+    expect(error.issues[0]?.message).toBe("first second");
+  });
+
+  it("removes invisible and direction-changing characters that could disguise text", async () => {
+    const error = await readProblem(
+      problem({
+        errors: [{ pointer: "/a", message: "pay‮evil​⁦text﻿" }],
+      }),
+    );
+    expect(error.issues[0]?.message).toBe("payeviltext");
+  });
+
+  it("trims spaces around the text", async () => {
+    const error = await readProblem(problem({ detail: "   spaced   " }));
+    expect(error.detail).toBe("spaced");
+  });
+
+  it("drops an issue whose message or pointer is empty after cleaning", async () => {
+    const error = await readProblem(
+      problem({
+        errors: [
+          { pointer: "/a", message: "​​" },
+          { pointer: "\u0000", message: "ok text" },
+          { pointer: "/b", message: "kept" },
+        ],
+      }),
+    );
+    expect(error.issues).toEqual([{ pointer: "/b", message: "kept" }]);
+  });
+
+  it("keeps at most 20 issues", async () => {
+    const errors = Array.from({ length: 100 }, (_, index) => ({
+      pointer: `/f${index}`,
+      message: `m${index}`,
+    }));
+    const error = await readProblem(problem({ errors }));
+    expect(error.issues).toHaveLength(20);
+    expect(error.issues[0]?.pointer).toBe("/f0");
+  });
+
+  it.each([
+    ["a line break", "urn:plotpal:problem:bad\ncode"],
+    ["capital letters", "urn:plotpal:problem:Bad"],
+    ["spaces", "urn:plotpal:problem:two words"],
+    ["a script tag", "urn:plotpal:problem:<script>"],
+    ["more than 64 characters", `urn:plotpal:problem:${"a".repeat(65)}`],
+  ])("has no code when the code part has %s", async (_name, type) => {
+    expect((await readProblem(problem({ type }))).code).toBeUndefined();
+  });
+
+  it("keeps a normal code, also with digits and dashes", async () => {
+    const error = await readProblem(problem({ type: "urn:plotpal:problem:rate-limited-2" }));
+    expect(error.code).toBe("rate-limited-2");
+  });
+
+  it("treats a detail that is empty after cleaning as missing", async () => {
+    const error = await readProblem(problem({ detail: "\n\t " }));
+    expect(error.detail).toBeUndefined();
+  });
+});
+
 describe("error classes", () => {
   it("ApiError is an Error with a stable name and a message that carries no server text", async () => {
     const error = await readProblem(problem({ detail: "secret-detail-from-server" }));

@@ -11,8 +11,17 @@ export interface RequestOptions {
   readonly auth?: boolean;
   /** Copy the CSRF cookie into the `X-CSRF-Token` header when the cookie exists. */
   readonly csrf?: boolean;
+  /** Cancels the request. The call then fails with an `AbortError`. */
   readonly signal?: AbortSignal;
+  /**
+   * How long to wait for the answer to start, in milliseconds. A server that accepts the
+   * connection and never answers would otherwise leave the page waiting for minutes.
+   */
+  readonly timeoutMs?: number;
 }
+
+/** Fifteen seconds: generous for a password check, short enough that nobody stares at a spinner. */
+export const DEFAULT_TIMEOUT_MS = 15_000;
 
 /**
  * Resolves an API path against this page's own origin. The access token and the CSRF code must
@@ -59,18 +68,39 @@ export async function apiRequest(path: string, options: RequestOptions = {}): Pr
     if (code !== undefined) headers.set("X-CSRF-Token", code);
   }
 
+  // One controller carries both the caller's wish to cancel and the timeout. It is built by hand
+  // instead of with `AbortSignal.timeout` and `AbortSignal.any`, which older Safari versions lack.
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new DOMException("The request took too long.", "TimeoutError"));
+  }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const caller = options.signal;
+  const relayAbort = () => {
+    controller.abort(caller?.reason);
+  };
+  if (caller?.aborted) relayAbort();
+  else caller?.addEventListener("abort", relayAbort, { once: true });
+
   let response: Response;
   try {
     response = await fetch(url, {
       method: options.method ?? "GET",
       headers,
       credentials: "same-origin",
+      // None of our routes redirects. Refusing to follow one means a misbehaving proxy cannot hand
+      // the CSRF code to another host.
+      redirect: "error",
+      signal: controller.signal,
       ...(options.json === undefined ? {} : { body: JSON.stringify(options.json) }),
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
   } catch (error) {
+    // A timeout is a failure to get an answer, like being offline. Only an abort that the caller
+    // asked for passes through unchanged.
     if (isAbort(error)) throw error;
     throw new NetworkError({ cause: error });
+  } finally {
+    clearTimeout(timer);
+    caller?.removeEventListener("abort", relayAbort);
   }
 
   if (!response.ok) throw await readProblem(response);

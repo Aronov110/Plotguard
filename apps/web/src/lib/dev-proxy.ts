@@ -1,5 +1,12 @@
 const DEFAULT_API_URL = "http://127.0.0.1:3000";
 
+/**
+ * Matches `/auth`, `/auth/...` and `/auth?...`, and nothing else. Vite reads a key that starts with
+ * `^` as a regular expression; a plain "/auth" key would match by prefix and also forward page
+ * addresses such as `/authors` or `/auth-callback` to the API.
+ */
+export const AUTH_PROXY_KEY = "^/auth(/|\\?|$)";
+
 export interface ProxyRule {
   readonly target: string;
   readonly changeOrigin: boolean;
@@ -40,5 +47,5 @@ export function createApiProxy(apiUrl: string | undefined): Record<string, Proxy
     throw new Error("API_URL must be only a scheme, host and port, without a path or query.");
   }
 
-  return { "/auth": { target: url.origin, changeOrigin: false, ws: false } };
+  return { [AUTH_PROXY_KEY]: { target: url.origin, changeOrigin: false, ws: false } };
 }

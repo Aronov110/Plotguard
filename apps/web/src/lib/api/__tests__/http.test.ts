@@ -4,7 +4,7 @@ import { z } from "zod";
 import { setCookie } from "../../../test-support/cookies.ts";
 import { server } from "../../../test-support/msw-server.ts";
 import { setAccessToken } from "../../auth/token-store.ts";
-import { apiJson, apiRequest } from "../http.ts";
+import { apiJson, apiRequest, DEFAULT_TIMEOUT_MS } from "../http.ts";
 import { ApiError, NetworkError, ResponseShapeError } from "../problem.ts";
 
 interface Seen {
@@ -126,6 +126,10 @@ describe("apiRequest", () => {
       ["a protocol-relative address", "//evil.example/x"],
       ["an absolute address", "https://evil.example/x"],
       ["a backslash trick", "/\\evil.example/x"],
+      ["a tab, which the URL parser deletes", "/\t/evil.example/x"],
+      ["a newline, which the URL parser deletes", "/\n/evil.example/x"],
+      ["a carriage return, which the URL parser deletes", "/\r/evil.example/x"],
+      ["a backslash and a tab", "/\\\t/evil.example/x"],
       ["a path without a leading slash", "thing"],
       ["an empty path", ""],
     ])("refuses %s without sending anything", async (_name, path) => {
@@ -188,6 +192,90 @@ describe("apiRequest", () => {
       const pending = apiRequest("/thing", { signal: controller.signal });
       controller.abort();
       await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    });
+
+    it("gives up on a request that is never answered, as a NetworkError caused by a timeout", async () => {
+      server.use(
+        http.get("/never", async () => {
+          await delay("infinite");
+          return HttpResponse.json({});
+        }),
+      );
+      const error = await apiRequest("/never", { timeoutMs: 50 }).catch(
+        (caught: unknown) => caught,
+      );
+      expect(error).toBeInstanceOf(NetworkError);
+      expect(((error as NetworkError).cause as Error).name).toBe("TimeoutError");
+    });
+
+    it("times out a request that was given an extra signal too, and keeps the caller's signal working", async () => {
+      server.use(
+        http.get("/never", async () => {
+          await delay("infinite");
+          return HttpResponse.json({});
+        }),
+      );
+      const controller = new AbortController();
+      const error = await apiRequest("/never", {
+        timeoutMs: 50,
+        signal: controller.signal,
+      }).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(NetworkError);
+    });
+
+    it("does not time out an answer that arrives in time", async () => {
+      server.use(
+        http.get("/slowish", async () => {
+          await delay(30);
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const response = await apiRequest("/slowish", { timeoutMs: 2000 });
+      expect(response.status).toBe(200);
+    });
+
+    it("has a default timeout of fifteen seconds", () => {
+      expect(DEFAULT_TIMEOUT_MS).toBe(15_000);
+    });
+
+    it("an abort by the caller after the answer arrived changes nothing", async () => {
+      const controller = new AbortController();
+      server.use(http.get("/thing", () => HttpResponse.json({ ok: true })));
+      const response = await apiRequest("/thing", { signal: controller.signal });
+      controller.abort();
+      expect(response.status).toBe(200);
+    });
+
+    it("refuses to follow a redirect, because none of our routes should ever redirect", async () => {
+      const calls = spy("/elsewhere");
+      server.use(
+        http.get(
+          "/thing",
+          () => new HttpResponse(null, { status: 302, headers: { location: "/elsewhere" } }),
+        ),
+      );
+      const error = await apiRequest("/thing").catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(NetworkError);
+      expect(calls).toHaveLength(0);
+    });
+
+    it("does not follow a redirect to another origin either, so the CSRF code cannot be handed on", async () => {
+      const calls = spy("*");
+      server.use(
+        http.post(
+          "/thing",
+          () =>
+            new HttpResponse(null, {
+              status: 307,
+              headers: { location: "https://evil.example/collect" },
+            }),
+        ),
+      );
+      const error = await apiRequest("/thing", { method: "POST", csrf: true }).catch(
+        (caught: unknown) => caught,
+      );
+      expect(error).toBeInstanceOf(NetworkError);
+      expect(calls.filter((call) => call.method === "POST")).toHaveLength(0);
     });
   });
 });

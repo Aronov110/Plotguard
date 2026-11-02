@@ -1,6 +1,15 @@
-// The API sets this cookie with a different name in production (`__Host-` prefix, see the README).
-// Looking for both names means a production build still works against a development API.
-const CSRF_COOKIE_NAMES = ["__Host-csrf_token", "csrf_token"] as const;
+/**
+ * The name of the CSRF cookie for a build. The API names its cookies after its own environment:
+ * `__Host-csrf_token` in production, `csrf_token` otherwise (see the README). A production build
+ * reads only the `__Host-` name, because browsers refuse to let another host (say, a sibling
+ * subdomain an attacker controls) set a `__Host-` cookie, but they do let it set a plain one.
+ * Accepting a plain name in production would let such a host plant a junk code.
+ */
+export function csrfCookieNames(production: boolean): readonly string[] {
+  return production ? ["__Host-csrf_token"] : ["csrf_token"];
+}
+
+const BUILD_COOKIE_NAMES = csrfCookieNames(import.meta.env.PROD);
 
 /**
  * Reads the CSRF code from the page's cookies. The web app copies it into the `X-CSRF-Token`
@@ -9,8 +18,13 @@ const CSRF_COOKIE_NAMES = ["__Host-csrf_token", "csrf_token"] as const;
  *
  * Returns `undefined` when the cookie is missing, empty or not valid percent-encoding. A missing
  * cookie also tells the session code that no one is signed in, so it skips a pointless request.
+ *
+ * @param names Which cookie names count. Defaults to the names for the current build.
  */
-export function readCsrfToken(cookies: string = document.cookie): string | undefined {
+export function readCsrfToken(
+  cookies: string = document.cookie,
+  names: readonly string[] = BUILD_COOKIE_NAMES,
+): string | undefined {
   const jar = new Map<string, string>();
   for (const part of cookies.split(";")) {
     const separator = part.indexOf("=");
@@ -20,7 +34,7 @@ export function readCsrfToken(cookies: string = document.cookie): string | undef
     if (!jar.has(name)) jar.set(name, part.slice(separator + 1).trim());
   }
 
-  for (const name of CSRF_COOKIE_NAMES) {
+  for (const name of names) {
     const raw = jar.get(name);
     if (raw === undefined || raw === "") continue;
     try {

@@ -38,8 +38,9 @@ Dependencies: `zod` (same version as the API), `msw` (dev).
 Atoms `Button`, `TextInput`, `Label`, `InlineError`; molecules `FormField`, `PasswordField`,
 `ErrorSummary`; organisms `RegisterForm`, `LoginForm`; templates `AuthLayout`, `AppLayout`; pages
 `HomePage`, `RegisterPage`, `LoginPage`, `AppHomePage`, `NotFoundPage`; guards `RequireAuth` and
-`RedirectIfSignedIn` (the return address is accepted only if it starts with a single `/`). Tokens
-get border, danger and success colours (contrast-checked in both themes).
+`RedirectIfSignedIn` (the return address is checked by resolving it, see "Security review of PR 1"
+below; starting with a single `/` is not enough). Tokens get border, danger and success colours
+(contrast-checked in both themes).
 
 | API answer           | Screen                                                           |
 | -------------------- | ---------------------------------------------------------------- |
@@ -110,11 +111,71 @@ races), TanStack Query (decide in Step 4), generated API types (revisit in Step 
   - The HTTP wrapper refuses any path that would leave the page's own origin, so a bug can never
     send the access token or the CSRF code to another host.
 - Known limits, accepted: a network or server failure while restoring shows "signed out" (the
-  cookie stays valid, so logging in again or reloading recovers); other tabs learn about a sign-out
-  only when their own token expires or a call gets a 401; `signOut()` returns `false` when the
-  server could not be reached, and PR 2 must tell the person (the refresh cookie is `HttpOnly`, so
-  the page cannot delete it itself).
+  cookie stays valid, so logging in again or reloading recovers); `signOut()` returns `false` when
+  the server could not be reached, and PR 2 must tell the person (the refresh cookie is `HttpOnly`,
+  so the page cannot delete it itself).
 - Test-code corrections made on the way (premises that were wrong, not behaviour changed to pass):
   the `setup(undefined)` helper silently used its default cookie; the "loading first" test ignored
   that no cookie means signed out at once; the abort check had to compare the error name because
   the test environment has its own `DOMException`.
+
+## Security review of PR 1 (2026-11-02, `security-reviewer` agent)
+
+No critical or high findings. Every claim was checked before anything was changed: M1 and L2 were
+reproduced with a throwaway test, L6 with the running dev server (`/authors` was forwarded to the
+API), L4 by reading the API's env schema (`REFRESH_REUSE_GRACE_SECONDS` accepts 0 to 60), M2 and L1
+by reading `http.ts`. Decision: all recommended fixes in one extra commit on the same PR; for L4
+only document it (no change to the merged API).
+
+| #   | Finding                                                                                                                              | Fix                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1  | After `signOut()`, while the logout request travels, a 401 made `withAuth` refresh and revive the session in the UI                  | A refresh never starts while signed out (outcome `stale`)                                                                                                     |
+| M2  | No timeout: a server that never answers left "loading" or "signing out" hanging                                                      | 15 s timeout per request (`timeoutMs`), built by hand for older Safari; a timeout is a `NetworkError`                                                         |
+| L1  | `fetch` followed redirects (reproduced: a 307 to another host was followed)                                                          | `redirect: "error"`                                                                                                                                           |
+| L2  | After a login during a refresh, `withAuth` joined the stale refresh and threw a 401                                                  | The shared refresh is keyed by login (`epoch`)                                                                                                                |
+| L3  | A timer refresh that failed for a passing reason was never retried                                                                   | Retry after 5, 10, 20, 40 s, then every 60 s, while the login lasts                                                                                           |
+| L4  | A tab that loses the refresh race twice signs itself out; `REFRESH_REUSE_GRACE_SECONDS=0` makes a normal two-tab race count as theft | README warning; no code change (grace default is 10)                                                                                                          |
+| L5  | A production build also trusted a plain `csrf_token` that a sibling subdomain could plant                                            | The cookie name follows the build: `__Host-csrf_token` in production, `csrf_token` otherwise                                                                  |
+| L6  | The `/auth` proxy key matched by prefix (`/authors` was forwarded to the API)                                                        | Regex key `^/auth(/\|\?\|$)`; README notes that `vite preview` (port 4173) needs its own `CORS_ORIGINS` entry                                                 |
+| L7  | A sign-out in one tab left the other tabs working until their token expired                                                          | `BroadcastChannel` message carrying only the word `signed-out`; other tabs end their login at once                                                            |
+| L8  | Server text in `ApiError` was unbounded                                                                                              | Messages 300, pointers 200, details 500 characters, at most 20 issues, control and invisible characters removed, problem code restricted to `[a-z0-9-]{1,64}` |
+
+Not changed: jitter on the timers (the API's grace window already covers two tabs refreshing at
+once). Not in scope here: CSP, `frame-ancestors`, HSTS and the reverse proxy passing the client IP
+and `Origin` (Step 6, already on the list); the API's `trustProxy` setting was not checked.
+
+Checks after the fixes: Biome and `tsc` clean; 283 web tests (was 180), 648 API unit and 446
+integration tests unchanged; `bun audit` clean; web build unchanged. On the running dev server
+`/authors`, `/auth-callback` and `/login` are pages and `/auth` and `/auth/...` reach the API. Test
+premises that were wrong and corrected (the code was right): a tab-prefixed `https://` path in the
+same-origin test stays on our own origin; the fake timer counted a timer that had already fired as
+live; one old test asserted that a failed timer refresh is never retried, which is the opposite of
+the approved L3 fix.
+
+### Requirements for PR 2 (from the review)
+
+1. **Return address after login.** "Starts with a single `/`" is not enough: `/\evil.com` and a
+   path with a tab in it are read by browsers as `//evil.com`. Resolve it the way `ownOriginUrl`
+   does (`new URL(value, location.origin).origin === location.origin`), navigate only to the
+   parsed `pathname + search + hash`, refuse anything under `/auth`, and never pass the raw value
+   to `window.location`. Tests: `//evil.com`, `https://evil.com`, `/\evil`, tab, newline and
+   carriage-return variants.
+2. **`signOut()` returning `false`.** Show "Could not confirm sign-out. Close this browser or try
+   again" and offer a retry (a retry works while the CSRF cookie exists). After pressing sign-out
+   nothing may call the API with the old token.
+3. **Disable the forms while the state is `loading` and while a request is running.** One login at a
+   time; never wrap `login` or `register` in `withAuth`.
+4. **Rendering server text.** Plain React text only, no `dangerouslySetInnerHTML`, and no `title`
+   or `aria-label` built from `detail`. Map `pointer` to fields through a fixed whitelist
+   (`/email`, `/password`, `/displayName`); never use it as a DOM id or `htmlFor`. Unknown problems
+   get generic text. `Retry-After` is only shown, never used to resubmit by itself.
+5. **Forms.** `autocomplete` `email` or `username`, `current-password` on login, `new-password` on
+   sign-up; do not trim passwords; paste allowed; no credentials in URLs, navigation state or
+   logged state. `type="email"` only if the server's validation stays the rule.
+6. **Every authenticated call goes through `withAuth`.**
+7. **Sign-up enumeration:** the 409 "already registered" answer is an accepted trade-off (the API
+   rate-limits sign-up); mention it in the PR so the owner can confirm.
+8. **Step 6 reminders:** `frame-ancestors 'none'`, CSP, `Referrer-Policy`, `nosniff`, HSTS on the
+   production host, and the `/auth` reverse-proxy rule must pass the real client IP and `Origin`.
+9. **Tests still to add in PR 2:** a login during the "loading" state is impossible (form
+   disabled); the Playwright round trip for the `Set-Cookie` headers through the proxy.

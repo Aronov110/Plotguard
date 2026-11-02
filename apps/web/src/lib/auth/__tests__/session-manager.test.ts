@@ -1,91 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AuthApi, PublicUser, SessionResponse } from "../../api/auth-api.ts";
-import { ApiError, NetworkError, ResponseShapeError } from "../../api/problem.ts";
-import { createSessionManager } from "../session-manager.ts";
+import { apiError, deferred, session, setup, USER } from "../../../test-support/session-harness.ts";
+import type { SessionResponse } from "../../api/auth-api.ts";
+import { NetworkError, ResponseShapeError } from "../../api/problem.ts";
 import { getAccessToken } from "../token-store.ts";
-
-const USER: PublicUser = { id: "user-1", email: "ada@example.com", displayName: null };
-
-function session(
-  accessToken = "token-1",
-  expiresIn = 900,
-  user: PublicUser = USER,
-): SessionResponse {
-  return { user, accessToken, expiresIn };
-}
-
-function apiError(status: number): ApiError {
-  return new ApiError({
-    status,
-    code: undefined,
-    detail: undefined,
-    issues: [],
-    retryAfterSeconds: undefined,
-  });
-}
-
-interface FakeTimer {
-  readonly callback: () => void;
-  readonly ms: number;
-  cancelled: boolean;
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
-// A default parameter would turn an explicit `undefined` back into the default value, so "no CSRF
-// cookie" is passed as `{ csrf: undefined }` and detected with `in`.
-function setup(options: { csrf?: string | undefined } = {}) {
-  const api = {
-    register: vi.fn<AuthApi["register"]>(),
-    login: vi.fn<AuthApi["login"]>(),
-    refresh: vi.fn<AuthApi["refresh"]>(),
-    logout: vi.fn<AuthApi["logout"]>().mockResolvedValue(undefined),
-    me: vi.fn<AuthApi["me"]>(),
-  };
-  const timers: FakeTimer[] = [];
-  let clock = 1_000_000;
-  let csrf = "csrf" in options ? options.csrf : "csrf-code";
-  const wait = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue(undefined);
-  const reportError = vi.fn<(error: unknown) => void>();
-
-  const manager = createSessionManager({
-    api,
-    readCsrf: () => csrf,
-    now: () => clock,
-    wait,
-    reportError,
-    setTimer: (callback, ms) => {
-      const timer: FakeTimer = { callback, ms, cancelled: false };
-      timers.push(timer);
-      return () => {
-        timer.cancelled = true;
-      };
-    },
-  });
-
-  return {
-    api,
-    manager,
-    timers,
-    wait,
-    reportError,
-    liveTimers: () => timers.filter((timer) => !timer.cancelled),
-    setCsrf: (value: string | undefined) => {
-      csrf = value;
-    },
-    advance: (ms: number) => {
-      clock += ms;
-    },
-  };
-}
 
 describe("session manager: starting", () => {
   it("is loading before it starts", () => {
@@ -412,7 +329,8 @@ describe("session manager: the refresh timer", () => {
     expect(manager.getState().status).toBe("signed-in");
   });
 
-  it("does not schedule another timer when the timer's refresh fails for a passing reason", async () => {
+  it("stays signed in and schedules a retry when the timer's refresh fails for a passing reason", async () => {
+    // The full retry rules (backoff, reset, cancelling) are in session-manager-lifecycle.test.ts.
     const { manager, api, timers } = setup();
     api.refresh.mockResolvedValueOnce(session("token-1", 900));
     await manager.start();
@@ -420,9 +338,9 @@ describe("session manager: the refresh timer", () => {
 
     timers[0]?.callback();
 
-    await vi.waitFor(() => expect(api.refresh).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(timers).toHaveLength(2));
     expect(manager.getState().status).toBe("signed-in");
-    expect(timers).toHaveLength(1);
+    expect(timers[1]?.ms).toBe(5000);
   });
 
   it("does not arm a timer when stop() was called before the restore finished", async () => {
