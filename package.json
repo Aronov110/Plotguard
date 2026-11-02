@@ -23,5 +23,10 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
     "typescript": "7.0.2"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
   }
 }
