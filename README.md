@@ -15,6 +15,7 @@ Users sign up and sign in, and their work is stored in a database.
 
 ```sh
 cp .env.example .env     # then change POSTGRES_PASSWORD (and both database URLs to match)
+                         # and set JWT_ACCESS_SECRET (the command is in .env.example)
 bun install
 bun run db:up            # starts PostgreSQL 18 on 127.0.0.1:5432 and waits until it is healthy
 bun run db:migrate       # creates the tables
