@@ -179,3 +179,21 @@ the approved L3 fix.
    production host, and the `/auth` reverse-proxy rule must pass the real client IP and `Origin`.
 9. **Tests still to add in PR 2:** a login during the "loading" state is impossible (form
    disabled); the Playwright round trip for the `Set-Cookie` headers through the proxy.
+
+## PR 2 notes (`feat/web-auth-screens`, 2026-11-02)
+
+Deviations from the approved dependency list, found while installing:
+
+- `vitest-axe` is not used: its last release is from October 2022. `axe-core` 4.14.0 (Deque,
+  maintained) is used directly through `test-support/a11y.ts`. Two helpers: one for a component,
+  one for a whole page (landmarks, exactly one `main`, exactly one level-one heading). Color
+  contrast cannot be computed without CSS, so `tokens.test.ts` checks every color pair of both
+  themes against WCAG, and the Playwright tests run axe again in a real browser in both schemes.
+- `react-router` 8.4.0 (seven weeks old) instead of the latest 8.5.1 (six days old).
+- The test config now processes `tokens.css` (and only that CSS file), so the contrast test can
+  read the real colors; `css: false` made a raw read return an empty string.
+- Axe 4.14 no longer reports duplicate plain ids, and does not report content outside a landmark
+  when it runs on a single component; the page helper therefore runs on the whole document.
+- A space at the edge of an inline element is dropped by some accessible-name algorithms, which
+  glued "Display name" to "(optional)" and "Error:" to the message. The spaces now sit outside the
+  elements (`Label`, `InlineError`).

@@ -16,7 +16,9 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       globals: true,
       setupFiles: ["./src/test-setup.ts"],
-      css: false,
+      // CSS is ignored in tests (jsdom does no layout) except the tokens file, whose colors are
+      // read by tokens.test.ts to check their contrast.
+      css: { include: /tokens\.css/ },
     },
   };
 });
