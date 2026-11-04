@@ -197,3 +197,52 @@ Deviations from the approved dependency list, found while installing:
 - A space at the edge of an inline element is dropped by some accessible-name algorithms, which
   glued "Display name" to "(optional)" and "Error:" to the message. The spaces now sit outside the
   elements (`Label`, `InlineError`).
+
+### Commit B: forms, pages and routing
+
+- Screens: `/` landing, `/login`, `/register`, `/app` (placeholder), `*` not found. The guards
+  `RequireAuth` and `RedirectIfSignedIn` live in `components/templates` (they render the "Checking
+  your session…" screen while the login is being restored, so no form is usable too early).
+- The return address is checked by resolving it against the page's origin (`safe-return-path.ts`),
+  after the review showed that "starts with a single `/`" accepts `/\evil.example`. It also refuses
+  `/auth` and `/%61uth` (the API's address space) and broken percent-encoding. It travels in the
+  router's history state, never in the query string.
+- Both forms share `lib/auth/use-auth-form.ts`: fields are read from the form when it is sent
+  (the password is never copied into React state), the email and display name are trimmed and the
+  password never is, one request at a time (a ref guards against two clicks before React re-renders),
+  every failure is mapped by `lib/auth/form-feedback.ts` to a fixed sentence or to the API's own
+  per-field message, and the focus moves to the error summary. Unexpected errors go to the console.
+- The "sign-out was not confirmed" state lives in `AuthProvider` (`signOutUnconfirmed`), not in a
+  screen: the screen that asked for the sign-out is gone by the time the answer arrives. The login
+  page shows `SignOutNotice` with a "Try signing out again" button.
+- `RouteFocus` moves the focus to the new screen's `h1` after a navigation (not on first load,
+  StrictMode-safe); `usePageTitle` sets the tab title; `AppLayout` has a skip link.
+- Deviations: `FormField` accepts `error: undefined` explicitly; `Button.css` and `tokens.css` got
+  `text-decoration: none` for links styled as buttons and a base `a` color.
+- Test fix: tests that waited for the fake server with a fixed delay (150 ms, 100 ms, 60 ms) were
+  races on a slow machine (one failed in a full run). The fake server now holds its answer until the
+  test opens a gate (`deferred`), which is deterministic. The web suite was run three times in a row.
+- Checks: Biome and `tsc` clean; 706 web tests (was 283), 648 API unit and 446 integration tests
+  unchanged; `bun audit` clean; first-load bundle 111.6 kB JS + 1.6 kB CSS gzipped (budget 150 kB).
+
+### Review of commit B (2026-11-04, `security-reviewer` agent plus a manual read)
+
+No critical or high findings. The checks were re-run first: Biome and `tsc` clean, 706 web tests.
+Everything below was read in the code before a decision; the return-address case was also tried in
+a test browser environment (jsdom).
+
+| #   | Finding                                                                                                                                   | Decision                                                                                                                                                              |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | If `signOut()` threw an unexpected error, `signOutUnconfirmed` was never set, so the "not confirmed" warning did not show                 | Fixed in `AuthProvider.signOut`: the error is caught and logged, counts as "not confirmed", and the call never rejects. The flag is not set before the call, so a normal sign-out never flashes the warning |
+| 2   | Retrying a sign-out while a login runs (or a sign-out followed at once by a login) might let the old logout reply clear the new login      | Not fixed. Plausible, not reproduced. To be tried in the Playwright tests before choosing a fix                                                                       |
+| 3   | `safeReturnPath` returned `//…` for `/.//evil.example`. The router collapses double slashes, so it is not exploitable today               | Fixed: a result that starts with `//` is refused; four test cases added                                                                                               |
+| 4   | A 400 issue whose pointer is not one of the three fields has the API's own message shown in the summary (plain text, capped, cleaned)     | Accepted as it is (owner's decision): it matches the table above, and the API is the one rulebook                                                                     |
+| 5   | The password field had no spellcheck, autocapitalize or autocorrect opt-out, which matters while the password is shown                    | Fixed in `PasswordField` (a file of the first commit, so a separate small commit)                                                                                     |
+| 6   | Trivial: comment above the JSDoc in `routes.tsx`; no JSDoc on `LoginPage` and `RegisterPage`                                              | Fixed                                                                                                                                                                 |
+
+Not changed: the unused `displayName` id in `LoginForm` (the shared type needs all three ids;
+loosening it touches four files). Information only: the web host must send the CSP and
+`frame-ancestors` (Step 6); the new code has no inline script or style, so a strict CSP is possible.
+
+Checks after the fixes: Biome and `tsc` clean; 714 web tests (was 706); the API was not touched and
+was not re-run. The first-load bundle was not measured again after these small changes.

@@ -1,0 +1,11 @@
+/* Shared by the sign-up and login forms. */
+
+.auth-form .button[type="submit"] {
+  width: 100%;
+}
+
+.auth-form__status {
+  min-height: 1.5em;
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+}

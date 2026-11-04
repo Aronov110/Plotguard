@@ -8,9 +8,9 @@ export interface FormFieldProps extends Omit<TextInputProps, "invalid" | "aria-d
   /** The visible name of the field. */
   readonly label: string;
   /** Help shown before the person types, for example the length a password needs. */
-  readonly hint?: string;
+  readonly hint?: string | undefined;
   /** What is wrong with the value. An empty string counts as no error. */
-  readonly error?: string;
+  readonly error?: string | undefined;
   /** Adds "(optional)" to the label. Required fields get no marker. */
   readonly optional?: boolean;
   /** An extra control beside the field, for example a "show password" button. */

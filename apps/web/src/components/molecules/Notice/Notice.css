@@ -1,0 +1,16 @@
+.notice {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-1);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.notice--warning {
+  border-color: var(--color-accent);
+}
+
+.notice > :last-child {
+  margin-bottom: 0;
+}

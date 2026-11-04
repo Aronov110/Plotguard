@@ -1,0 +1,6 @@
+.checking-session {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-3);
+  color: var(--color-text-muted);
+}
