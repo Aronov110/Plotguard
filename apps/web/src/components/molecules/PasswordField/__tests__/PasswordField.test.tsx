@@ -35,6 +35,22 @@ describe("PasswordField", () => {
     expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "new-password");
   });
 
+  it("keeps spell checking, capitals and autocorrect off, hidden or shown", async () => {
+    const user = userEvent.setup();
+    render(<PasswordField id="password" label="Password" autoComplete="current-password" />);
+    const field = screen.getByLabelText("Password");
+    const expectOff = (): void => {
+      expect(field).toHaveAttribute("spellcheck", "false");
+      expect(field).toHaveAttribute("autocapitalize", "none");
+      expect(field).toHaveAttribute("autocorrect", "off");
+    };
+
+    expectOff();
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(field).toHaveAttribute("type", "text");
+    expectOff();
+  });
+
   describe("show password button", () => {
     it("starts unpressed and points to the field", () => {
       render(<PasswordField id="password" label="Password" autoComplete="current-password" />);

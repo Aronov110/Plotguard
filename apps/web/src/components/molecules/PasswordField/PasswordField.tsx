@@ -23,6 +23,11 @@ export function PasswordField({ id, ...rest }: PasswordFieldProps): ReactElement
       {...rest}
       id={id}
       type={visible ? "text" : "password"}
+      // Once the password is shown the field is plain text, so the browser's spell checker and a
+      // phone keyboard's learning could otherwise see it. These come last so a caller cannot undo them.
+      spellCheck={false}
+      autoCapitalize="none"
+      autoCorrect="off"
       action={
         // The name stays "Show password" and `aria-pressed` carries the state: changing the name as
         // well would make a screen reader announce the state twice, and wrongly.
