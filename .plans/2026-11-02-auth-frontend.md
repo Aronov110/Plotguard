@@ -1,5 +1,6 @@
-Status: approved (2026-11-02). All recommended options accepted, two-PR split accepted, new
-dependencies accepted, Storybook goes into its own small PR before Step 4.
+Status: done (2026-11-02, finished 2026-11-04), merged in PRs #8 and #9. All recommended options
+accepted, two-PR split accepted, new dependencies accepted, Storybook goes into its own small PR
+before Step 4. Not part of the merged work: the Playwright tests (see "Outcome" at the end).
 
 # Step 3: Auth frontend
 
@@ -246,3 +247,12 @@ loosening it touches four files). Information only: the web host must send the C
 
 Checks after the fixes: Biome and `tsc` clean; 714 web tests (was 706); the API was not touched and
 was not re-run. The first-load bundle was not measured again after these small changes.
+
+## Outcome (2026-11-04)
+
+PR 1 merged as #8 and PR 2 as #9. PR 2 went in **without the Playwright tests** this plan promised
+for it (decision of 2026-11-04, see `2026-11-04-push-web-auth-screens.md`). They become their own
+PR 3, and `@playwright/test` is not installed yet. Still unproven until then: the `Set-Cookie` round
+trip through the dev proxy, axe in a real browser in both colour schemes, and finding 2 of the
+review above (a retried sign-out possibly letting an old logout reply clear a new login). Storybook
+is still its own small PR before Step 4.
