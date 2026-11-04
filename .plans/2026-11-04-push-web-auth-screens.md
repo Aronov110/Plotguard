@@ -1,5 +1,5 @@
-Status: approved (2026-11-04). Decision 1: option A (open the PR now, Playwright tests become their
-own PR 3). Decision 2: option A (this plan is committed on the branch).
+Status: done (2026-11-04), merged in PR #9. Decision 1: option A (open the PR now, Playwright tests
+become their own PR 3). Decision 2: option A (this plan is committed on the branch).
 
 # Push `feat/web-auth-screens` and open the PR
 
