@@ -139,7 +139,35 @@ bun run lint
 bun run typecheck
 bun run test               # unit tests, no database needed
 bun run test:integration   # needs the database from `bun run db:up`
+bun run test:e2e           # browser tests, see below
 ```
+
+### End-to-end tests (Playwright)
+
+`bun run test:e2e` drives a real browser (Chromium and WebKit, the Safari engine) through the built
+web app and a real API. It is not part of `bun run test`: it is slower and needs the database.
+
+- **First time:** `cd apps/web && bunx playwright install chromium webkit` downloads the browsers
+  (a few hundred MB, once). The database must be running (`bun run db:up`).
+- **What it starts:** an API on `127.0.0.1:3100` and the web app on `127.0.0.1:4173`, never reusing
+  a running server, so your development servers (3000 and 5173) are left alone. The API is
+  `apps/api/src/test-support/e2e-server.ts`: it drops and rebuilds a throwaway database
+  `plotpal_e2e_test` on the server named by `TEST_DATABASE_URL`, listens on loopback only, and
+  relaxes only the per-address sign-up and login limits. It refuses `NODE_ENV=production`.
+- **What it covers:** the full sign-up, reload, sign-out and login journeys; the cookie flags
+  through the dev proxy; no token in browser storage; axe (accessibility) in light and dark mode
+  with colour contrast; 320 px reflow; target size; keyboard and focus order.
+- **Limits:** the web app is built with `NODE_ENV=development` for the run, because the API sets the
+  plain cookie name `csrf_token` over http and a production build reads only `__Host-csrf_token`.
+  The production cookie names and flags (`__Host-`, `Secure`) need https and are not covered.
+  WebKit does not Tab to links (the Safari default), so link tab stops are checked in Chromium only.
+  No automatic checks run on GitHub, so run this yourself before a PR that touches the web app.
+- **Known bug, recorded as an expected failure:** `sign-out-race.e2e.ts` shows that a sign-out
+  answer that arrives after a new login deletes the new login's cookies. The test is marked
+  `test.fail`; when the bug is fixed it starts to pass and Playwright asks you to remove the mark.
+- Reports and traces go to `apps/web/playwright-report/` and `apps/web/test-results/` (ignored by
+  git). A trace can contain typed passwords and cookies: the tests use made-up accounts only, but
+  do not share the folders.
 
 ## Layout
 

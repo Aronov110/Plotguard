@@ -251,8 +251,9 @@ was not re-run. The first-load bundle was not measured again after these small c
 ## Outcome (2026-11-04)
 
 PR 1 merged as #8 and PR 2 as #9. PR 2 went in **without the Playwright tests** this plan promised
-for it (decision of 2026-11-04, see `2026-11-04-push-web-auth-screens.md`). They become their own
-PR 3, and `@playwright/test` is not installed yet. Still unproven until then: the `Set-Cookie` round
-trip through the dev proxy, axe in a real browser in both colour schemes, and finding 2 of the
-review above (a retried sign-out possibly letting an old logout reply clear a new login). Storybook
-is still its own small PR before Step 4.
+for it (decision of 2026-11-04, see `2026-11-04-push-web-auth-screens.md`). They became their own
+PR 3 (`2026-11-04-playwright-e2e.md`), which proves the `Set-Cookie` round trip through the dev
+proxy and axe in a real browser in both colour schemes. Finding 2 of the review above turned out to
+be **real**: a sign-out answer that arrives after a new login deletes the new login's cookies. It is
+recorded as an expected-failure test and needs its own fix PR. Storybook is still its own small PR
+before Step 4.
