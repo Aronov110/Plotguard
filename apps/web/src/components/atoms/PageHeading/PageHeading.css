@@ -1,0 +1,11 @@
+.page-heading {
+  margin: 0 0 var(--space-3);
+  color: var(--color-accent);
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+/* A heading is not something you press, so when the focus is moved to it there is no ring. */
+.page-heading:focus {
+  outline: none;
+}

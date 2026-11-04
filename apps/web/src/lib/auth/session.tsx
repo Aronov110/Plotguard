@@ -2,6 +2,7 @@ import {
   createContext,
   type ReactElement,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -14,7 +15,20 @@ export interface AuthContextValue {
   readonly state: SessionState;
   readonly login: SessionManager["login"];
   readonly register: SessionManager["register"];
+  /**
+   * Signs out on this page at once, then tells the server. Never rejects.
+   * @returns whether the server confirmed (see `signOutUnconfirmed`). `false` also covers an
+   *   unexpected failure.
+   */
   readonly signOut: SessionManager["signOut"];
+  /**
+   * True after a sign-out that the server did not confirm, until a later sign-out is confirmed or
+   * the person logs in again. The page is signed out then, but the login cookie (which the page
+   * cannot delete: it is `HttpOnly`) may still be valid, so on a shared computer the person must
+   * be told. It lives here, not in a screen, because the screen that asked for the sign-out is
+   * gone by the time the answer arrives.
+   */
+  readonly signOutUnconfirmed: boolean;
   readonly withAuth: SessionManager["withAuth"];
 }
 
@@ -30,6 +44,7 @@ export interface AuthProviderProps {
 export function AuthProvider({ children, manager }: AuthProviderProps): ReactElement {
   const [active] = useState(() => manager ?? createSessionManager());
   const state = useSyncExternalStore(active.subscribe, active.getState, active.getState);
+  const [signOutUnconfirmed, setSignOutUnconfirmed] = useState(false);
 
   // React's StrictMode runs this effect, cleans it up and runs it again while developing. The
   // manager copes: `start` restores the login only once and re-arms the timer that `stop` cancelled.
@@ -40,15 +55,38 @@ export function AuthProvider({ children, manager }: AuthProviderProps): ReactEle
     };
   }, [active]);
 
+  const login = useCallback<SessionManager["login"]>(
+    async (input) => {
+      await active.login(input);
+      setSignOutUnconfirmed(false);
+    },
+    [active],
+  );
+
+  const register = useCallback<SessionManager["register"]>(
+    async (input) => {
+      await active.register(input);
+      setSignOutUnconfirmed(false);
+    },
+    [active],
+  );
+
+  const signOut = useCallback<SessionManager["signOut"]>(async () => {
+    let confirmed = false;
+    try {
+      confirmed = await active.signOut();
+    } catch (error) {
+      // An unexpected failure (a bug) is treated like an unreachable server: the page is signed out
+      // already, the server may not know, so the warning must show. The cause goes to the console.
+      console.error(error);
+    }
+    setSignOutUnconfirmed(!confirmed);
+    return confirmed;
+  }, [active]);
+
   const value = useMemo<AuthContextValue>(
-    () => ({
-      state,
-      login: active.login,
-      register: active.register,
-      signOut: active.signOut,
-      withAuth: active.withAuth,
-    }),
-    [state, active],
+    () => ({ state, login, register, signOut, signOutUnconfirmed, withAuth: active.withAuth }),
+    [state, login, register, signOut, signOutUnconfirmed, active],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

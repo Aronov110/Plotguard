@@ -9,7 +9,13 @@
   --color-text: #1f1b16;
   --color-text-muted: #5c5348;
   --color-accent: #7a3e12;
+  --color-on-accent: #ffffff;
   --color-focus: #0b57d0;
+  --color-border: #7d7266;
+  --color-danger: #b3261e;
+  --color-danger-bg: #fdecea;
+  --color-success: #1b6a38;
+  --color-success-bg: #e6f4ea;
 
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-writing: "Courier New", Courier, monospace;
@@ -21,6 +27,9 @@
   --space-5: 2.5rem;
 
   --radius-1: 0.375rem;
+
+  /* The smallest height of anything you press or tap (WCAG 2.5.8 asks for 24px; 44px is easier). */
+  --size-target: 2.75rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -30,8 +39,27 @@
     --color-text: #f2ece3;
     --color-text-muted: #b8ad9e;
     --color-accent: #e0a36b;
+    --color-on-accent: #16130f;
     --color-focus: #8ab4f8;
+    --color-border: #8f8576;
+    --color-danger: #f4a6a0;
+    --color-danger-bg: #3a1b19;
+    --color-success: #8fd3a4;
+    --color-success-bg: #16301f;
   }
+}
+
+/* Text for screen readers only: out of sight, but still read aloud and still in the page. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 *,
@@ -46,6 +74,10 @@ body {
   color: var(--color-text);
   font-family: var(--font-ui);
   line-height: 1.5;
+}
+
+a {
+  color: var(--color-accent);
 }
 
 :focus-visible {

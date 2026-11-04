@@ -1,0 +1,10 @@
+.label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-weight: 600;
+}
+
+.label__optional {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}

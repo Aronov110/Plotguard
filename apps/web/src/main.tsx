@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { App } from "./App.tsx";
 import "./components/ions/tokens.css";
-import { HomePage } from "./components/pages/HomePage/HomePage.tsx";
 
 const container = document.getElementById("root");
 if (!container) {
@@ -10,6 +10,6 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <HomePage />
+    <App />
   </StrictMode>,
 );

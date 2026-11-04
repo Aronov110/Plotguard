@@ -1,0 +1,16 @@
+.skip-link {
+  position: absolute;
+  top: -4rem;
+  left: var(--space-3);
+  z-index: 1;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-1);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+/* Off the screen, but still reachable: it slides into view when the keyboard arrives. */
+.skip-link:focus {
+  top: var(--space-2);
+}

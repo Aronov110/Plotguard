@@ -74,6 +74,19 @@ cannot plant its own login cookies in a visitor's browser. Development uses the 
 
 ### Web app
 
+Open **http://127.0.0.1:5173** (not `localhost`, see below). The screens:
+
+| Address               | Screen                                | Who sees it                      |
+| --------------------- | ------------------------------------- | -------------------------------- |
+| `/`                   | Landing page                          | everyone                         |
+| `/register`, `/login` | Sign-up and login forms               | signed-out; others are sent on   |
+| `/app`                | Your projects (a placeholder for now) | signed-in; others go to `/login` |
+| anything else         | Page not found                        | everyone                         |
+
+After a login the person returns to the private page that sent them to the login. That address is
+checked by resolving it (`lib/navigation/safe-return-path.ts`), so `//evil.example`, `/\evil.example`
+and the like are ignored and the person lands on `/app`.
+
 Rules for the web app, and how it follows them:
 
 - **One origin.** The API must be reached from the same host as the page, behind a reverse proxy.

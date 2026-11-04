@@ -1,0 +1,9 @@
+.inline-error {
+  margin: var(--space-1) 0 0;
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.inline-error__icon {
+  margin-right: var(--space-1);
+}
