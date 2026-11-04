@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { loadEnv } from "vite";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { createApiProxy } from "./src/lib/dev-proxy.ts";
 
 export default defineConfig(({ mode }) => {
@@ -16,6 +16,8 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       globals: true,
       setupFiles: ["./src/test-setup.ts"],
+      // The browser tests in e2e/ run with Playwright (`bun run test:e2e`), not with Vitest.
+      exclude: [...configDefaults.exclude, "e2e/**"],
       // CSS is ignored in tests (jsdom does no layout) except the tokens file, whose colors are
       // read by tokens.test.ts to check their contrast.
       css: { include: /tokens\.css/ },
