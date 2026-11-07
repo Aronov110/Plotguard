@@ -13,8 +13,11 @@ import type { Database, DatabaseHandle } from "./db/client.ts";
 import { frameworkErrorHandler, registerErrorHandling } from "./errors/error-handler.ts";
 import { registerOpenApi } from "./plugins/openapi.ts";
 import { registerSecurity } from "./plugins/security.ts";
+import { DEFAULT_PROJECT_LIMITS, type ProjectLimits } from "./projects/limits.ts";
+import { createProjectsService } from "./projects/service.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { projectsRoutes } from "./routes/projects.ts";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -45,6 +48,8 @@ export interface AppDependencies {
   readonly passwordHasher?: PasswordHasher;
   /** Replaces the limits on the auth routes. Tests use them to reach a limit quickly. */
   readonly authLimits?: AuthLimits;
+  /** Replaces the limits on the project routes. Tests use them to reach a limit quickly. */
+  readonly projectLimits?: ProjectLimits;
 }
 
 /** Builds the Fastify app without listening, so tests can use `app.inject()`. */
@@ -121,6 +126,12 @@ export function buildApp(env: Env, deps: AppDependencies): FastifyInstance {
     // Browsers refuse Secure cookies on plain http, which local development uses.
     cookies: { secure: env.NODE_ENV === "production" },
     limits: deps.authLimits ?? DEFAULT_AUTH_LIMITS,
+  });
+  app.register(projectsRoutes, {
+    prefix: "/projects",
+    auth,
+    projects: createProjectsService(deps.database.db),
+    limits: deps.projectLimits ?? DEFAULT_PROJECT_LIMITS,
   });
 
   return app;

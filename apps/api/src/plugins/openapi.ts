@@ -45,6 +45,15 @@ export function registerOpenApi(app: FastifyInstance): void {
             "wrong credentials, 403 wrong origin or CSRF code, 409 email taken, 413 body too " +
             "large, 415 not JSON, 429 too many requests (see `Retry-After`).",
         },
+        {
+          name: "projects",
+          description:
+            "The signed-in person's own projects (a screenplay, a novel, ...). Every route needs " +
+            "the access token. A project of someone else is answered with 404, like one that " +
+            "does not exist. Errors are Problem Details: 400 invalid input or cursor, 401 not " +
+            "signed in, 404 no such project, 413 body too large, 415 not JSON, 429 too many " +
+            "changes (see `Retry-After`).",
+        },
       ],
       components: {
         securitySchemes: {

@@ -7,6 +7,9 @@ const DEFAULT_API_URL = "http://127.0.0.1:3000";
  */
 export const AUTH_PROXY_KEY = "^/auth(/|\\?|$)";
 
+/** The same shape for `/projects`, `/projects/...` and `/projects?...`. */
+export const PROJECTS_PROXY_KEY = "^/projects(/|\\?|$)";
+
 export interface ProxyRule {
   readonly target: string;
   readonly changeOrigin: boolean;
@@ -14,7 +17,8 @@ export interface ProxyRule {
 }
 
 /**
- * Builds the Vite dev-server proxy that forwards `/auth` to the API, so the page and the API share
+ * Builds the Vite dev-server proxy that forwards `/auth` and `/projects` to the API, so the page and
+ * the API share
  * one address. That is required, not a convenience: the login cookies are `SameSite=Strict` and
  * host-only, and the web app can only read the CSRF cookie of its own host.
  *
@@ -47,5 +51,6 @@ export function createApiProxy(apiUrl: string | undefined): Record<string, Proxy
     throw new Error("API_URL must be only a scheme, host and port, without a path or query.");
   }
 
-  return { [AUTH_PROXY_KEY]: { target: url.origin, changeOrigin: false, ws: false } };
+  const rule: ProxyRule = { target: url.origin, changeOrigin: false, ws: false };
+  return { [AUTH_PROXY_KEY]: rule, [PROJECTS_PROXY_KEY]: { ...rule } };
 }

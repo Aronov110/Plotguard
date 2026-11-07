@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { AUTH_PROXY_KEY, createApiProxy } from "../dev-proxy.ts";
+import { AUTH_PROXY_KEY, createApiProxy, PROJECTS_PROXY_KEY } from "../dev-proxy.ts";
 
 describe("createApiProxy", () => {
-  it("forwards only /auth", () => {
-    expect(Object.keys(createApiProxy(undefined))).toEqual([AUTH_PROXY_KEY]);
+  it("forwards /auth and /projects, and nothing else", () => {
+    expect(Object.keys(createApiProxy(undefined)).sort()).toEqual(
+      [AUTH_PROXY_KEY, PROJECTS_PROXY_KEY].sort(),
+    );
+  });
+
+  it("sends both to the same API with the same settings", () => {
+    const proxy = createApiProxy("http://localhost:4000");
+    expect(proxy[PROJECTS_PROXY_KEY]).toEqual(proxy[AUTH_PROXY_KEY]);
+    expect(proxy[PROJECTS_PROXY_KEY]?.target).toBe("http://localhost:4000");
+    expect(proxy[PROJECTS_PROXY_KEY]?.changeOrigin).toBe(false);
+    expect(proxy[PROJECTS_PROXY_KEY]?.ws).toBe(false);
   });
 
   it("defaults to the local API", () => {
@@ -72,5 +82,43 @@ describe("the /auth rule", () => {
     "/Auth",
   ])("does not forward %s, which stays a page address", (path) => {
     expect(rule.test(path)).toBe(false);
+  });
+});
+
+describe("the /projects rule", () => {
+  const rule = new RegExp(PROJECTS_PROXY_KEY);
+
+  it("is written as a regular expression", () => {
+    expect(PROJECTS_PROXY_KEY.startsWith("^")).toBe(true);
+  });
+
+  it.each([
+    "/projects",
+    "/projects/",
+    "/projects/019e5a3c-1b2d-7c4e-8f10-a1b2c3d4e5f6",
+    "/projects?limit=5",
+    "/projects?limit=5&cursor=abc",
+    "/projects/x?y=1",
+  ])("forwards %s", (path) => {
+    expect(rule.test(path)).toBe(true);
+  });
+
+  it.each([
+    "/projectsearch",
+    "/projects-old",
+    "/projects_x",
+    "/Projects",
+    "/app/projects",
+    "/app",
+    "/x/projects",
+    "/",
+    "/auth",
+  ])("does not forward %s, which stays a page address", (path) => {
+    expect(rule.test(path)).toBe(false);
+  });
+
+  it("does not make the auth rule forward projects, or the other way round", () => {
+    expect(new RegExp(AUTH_PROXY_KEY).test("/projects")).toBe(false);
+    expect(rule.test("/auth")).toBe(false);
   });
 });
