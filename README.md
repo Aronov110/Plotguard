@@ -162,9 +162,10 @@ web app and a real API. It is not part of `bun run test`: it is slower and needs
   The production cookie names and flags (`__Host-`, `Secure`) need https and are not covered.
   WebKit does not Tab to links (the Safari default), so link tab stops are checked in Chromium only.
   No automatic checks run on GitHub, so run this yourself before a PR that touches the web app.
-- **Known bug, recorded as an expected failure:** `sign-out-race.e2e.ts` shows that a sign-out
-  answer that arrives after a new login deletes the new login's cookies. The test is marked
-  `test.fail`; when the bug is fixed it starts to pass and Playwright asks you to remove the mark.
+- **Sign-out followed by a login:** a sign-out answer deletes the login cookies whenever it
+  arrives, so the web app sends a login or sign-up only after the sign-out request of the same tab
+  has finished (`sign-out-race.e2e.ts` proves the order). Not covered: a sign-out in one tab and a
+  login in another tab at the same moment.
 - Reports and traces go to `apps/web/playwright-report/` and `apps/web/test-results/` (ignored by
   git). A trace can contain typed passwords and cookies: the tests use made-up accounts only, but
   do not share the folders.

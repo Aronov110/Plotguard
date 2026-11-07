@@ -150,6 +150,35 @@ describe("sign-out that the server could not confirm", () => {
     expect(screen.getByTestId("unconfirmed")).toHaveTextContent("false");
   });
 
+  it("goes away when the person logs in while the failing sign-out is still waiting for its answer", async () => {
+    let answer: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    let loginSent = false;
+    server.use(
+      http.post("/auth/logout", async () => {
+        await gate;
+        return HttpResponse.error();
+      }),
+      http.post("/auth/login", () => {
+        loginSent = true;
+        return HttpResponse.json(SESSION);
+      }),
+    );
+    await signedInProbe();
+    fireEvent.click(screen.getByRole("button", { name: "sign out" }));
+    fireEvent.click(screen.getByRole("button", { name: "log in" }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(loginSent).toBe(false);
+
+    answer();
+
+    await screen.findByText("signed-in");
+    expect(loginSent).toBe(true);
+    expect(screen.getByTestId("unconfirmed")).toHaveTextContent("false");
+  });
+
   it("goes away when the person signs up again", async () => {
     server.use(
       http.post("/auth/logout", () => HttpResponse.error()),

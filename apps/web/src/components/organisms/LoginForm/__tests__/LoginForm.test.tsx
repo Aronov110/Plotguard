@@ -4,6 +4,7 @@ import { HttpResponse, http } from "msw";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { AuthProvider } from "../../../../lib/auth/session.tsx";
+import { createSessionManager } from "../../../../lib/auth/session-manager.ts";
 import { expectNoA11yViolations } from "../../../../test-support/a11y.ts";
 import { AuthStateProbe } from "../../../../test-support/auth-state-probe.tsx";
 import { server } from "../../../../test-support/msw-server.ts";
@@ -217,6 +218,83 @@ describe("LoginForm", () => {
       expect(calls).toHaveLength(1);
       expect(button).not.toHaveAttribute("aria-busy");
       expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    });
+  });
+
+  describe("right after a sign-out whose answer has not arrived yet", () => {
+    // The sign-out answer deletes the login cookies when it arrives. A login sent before that
+    // would have its new cookies deleted, so the form waits and shows the usual working state.
+    function renderAfterSignOut(logoutReply: () => Response) {
+      const logoutGate = deferred<undefined>();
+      const order: string[] = [];
+      server.use(
+        http.post("/auth/logout", async () => {
+          await logoutGate.promise;
+          order.push("logout answered");
+          return logoutReply();
+        }),
+      );
+      const calls = loginRoute(() => {
+        order.push("login answered");
+        return HttpResponse.json(SESSION);
+      });
+      const manager = createSessionManager();
+      // Signs out on the page at once; the request stays open until the gate opens.
+      void manager.signOut();
+      const view = render(
+        <MemoryRouter>
+          <AuthProvider manager={manager}>
+            <LoginForm />
+            <AuthStateProbe />
+          </AuthProvider>
+        </MemoryRouter>,
+      );
+      return { ...view, user: userEvent.setup(), logoutGate, order, calls };
+    }
+
+    const noContent = () => new HttpResponse(null, { status: 204 });
+
+    it("shows that it is working and sends the login only after the sign-out answer", async () => {
+      const { user, logoutGate, order, calls } = renderAfterSignOut(noContent);
+
+      await fillAndSubmit(user);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(screen.getByRole("button", { name: "Log in" })).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByRole("status")).toHaveTextContent("Signing you in…");
+      expect(calls).toHaveLength(0);
+
+      logoutGate.resolve(undefined);
+
+      expect(await screen.findByText("signed-in:ada@example.com")).toBeInTheDocument();
+      expect(order).toEqual(["logout answered", "login answered"]);
+      expect(calls).toEqual([{ email: "ada@example.com", password: PASSWORD }]);
+    });
+
+    it("sends only one login, however often the button is pressed while it waits", async () => {
+      const { user, logoutGate, calls } = renderAfterSignOut(noContent);
+      await user.type(screen.getByLabelText("Email"), "ada@example.com");
+      await user.click(screen.getByLabelText("Password"));
+      await user.paste(PASSWORD);
+
+      const button = screen.getByRole("button", { name: "Log in" });
+      await user.click(button);
+      await user.click(button);
+      await user.dblClick(button);
+      logoutGate.resolve(undefined);
+
+      await screen.findByText("signed-in:ada@example.com");
+      expect(calls).toHaveLength(1);
+    });
+
+    it("still signs in when the sign-out could not reach the server", async () => {
+      const { user, logoutGate, calls } = renderAfterSignOut(() => HttpResponse.error());
+
+      await fillAndSubmit(user);
+      logoutGate.resolve(undefined);
+
+      expect(await screen.findByText("signed-in:ada@example.com")).toBeInTheDocument();
+      expect(calls).toHaveLength(1);
     });
   });
 

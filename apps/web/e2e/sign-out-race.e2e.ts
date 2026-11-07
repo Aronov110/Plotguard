@@ -1,47 +1,66 @@
-import { expect, test } from "@playwright/test";
-import { holdNextLogoutReply, releaseLogoutReply } from "./support/api-control.ts";
-import { logIn, PROJECTS_HEADING, signOut, signUp } from "./support/flows.ts";
+import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { createAccount, holdNextLogoutReply, releaseLogoutReply } from "./support/api-control.ts";
+import { PROJECTS_HEADING, signOut, signUp, submitLoginForm } from "./support/flows.ts";
 import { WEB_ORIGIN } from "./support/targets.ts";
 import { uniqueUser } from "./support/users.ts";
 
-// Review finding 2 (see .plans/2026-11-02-auth-frontend.md): a sign-out whose answer arrives late,
-// followed at once by a new login, might let the old answer undo the new login.
+// Review finding 2 (see .plans/2026-11-02-auth-frontend.md), fixed in .plans/2026-11-05-sign-out-
+// login-race.md: a sign-out whose answer arrives late, followed at once by a new login, used to let
+// the old answer undo the new login.
 //
 // The answer to a logout carries `Set-Cookie` headers that delete the login cookies. The browser
-// applies them whenever the answer arrives, whatever the page's code thinks by then. The end-to-end
-// API can hold that answer back (the logout itself still happens at once), which is what a slow
-// network does. Timing is controlled by that switch and by waiting for events, never by sleeping.
+// applies them whenever the answer arrives, whatever the page's code thinks by then. So the page now
+// sends a login only after the sign-out answer has arrived (or the request has failed). The
+// end-to-end API can hold that answer back (the logout itself still happens at once), which is what
+// a slow network does. Timing is controlled by that switch and by waiting for events, never by
+// sleeping.
 
 const cookieNamed =
   (name: string) =>
   (cookie: { readonly name: string }): boolean =>
     cookie.name === name;
 
-test("a late sign-out answer does not delete the cookies of the login that came after it", async ({
-  page,
-  context,
-  request,
-}) => {
-  // KNOWN BUG, reproduced on 2026-11-04 (finding 2 is real): the late answer's Set-Cookie headers
-  // delete the NEW login's cookies, so the next reload shows the person signed out although they
-  // just logged in. Decision of the plan: record it here, fix it in its own PR. When the fix lands,
-  // this test starts to pass, Playwright reports "expected to fail, but passed", and the next line
-  // is deleted.
-  test.fail(true, "Finding 2: a late logout answer clears the cookies of a newer login.");
+/**
+ * Notes, in the order they happen in the browser, when the logout answer arrives and when a login
+ * request leaves. Comparing that order is how the tests prove "the login waited".
+ */
+function recordOrder(page: Page): readonly string[] {
+  const events: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/auth/login") && request.method() === "POST") {
+      events.push("login sent");
+    }
+  });
+  page.on("response", (response) => {
+    if (response.url().endsWith("/auth/logout") && response.request().method() === "POST") {
+      events.push("logout answered");
+    }
+  });
+  return events;
+}
 
-  const user = uniqueUser();
-  await signUp(page, user);
-
+/**
+ * Signs `first` out with the answer held, submits the login form for `second` meanwhile, checks
+ * that the login is waiting, lets the answer go, and waits until the browser has applied it.
+ * Returns the recorded order of events.
+ */
+async function logInWhileSignOutIsHeld(
+  page: Page,
+  request: APIRequestContext,
+  second: { readonly email: string; readonly password: string },
+): Promise<readonly string[]> {
+  const events = recordOrder(page);
   await holdNextLogoutReply(request);
   try {
     // 1. Sign out. The server ends the login at once, but its answer is held back.
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/login$/);
-    // Proof that the hold works: the answer has not arrived, so the cookies are still there.
-    expect((await context.cookies()).some(cookieNamed("csrf_token"))).toBe(true);
 
-    // 2. Log in again while the old answer is still on its way.
-    await logIn(page, user);
+    // 2. Press "Log in" while the old answer is still on its way. The form shows it is working.
+    await submitLoginForm(page, second.email, second.password);
+    await expect(page.getByRole("button", { name: "Log in" })).toHaveAttribute("aria-busy", "true");
+    await expect(page.getByRole("status")).toHaveText("Signing you in…");
+    expect(events).toEqual([]);
 
     // 3. Let the old answer arrive, and wait until the browser has it.
     const lateAnswer = page.waitForResponse(
@@ -54,16 +73,54 @@ test("a late sign-out answer does not delete the cookies of the login that came 
     // Never leave the server holding a reply if the test failed half-way.
     await releaseLogoutReply(request);
   }
+  return events;
+}
 
-  // 4. The new login's cookies must have survived the late answer...
+test("a late sign-out answer does not delete the cookies of the login that came after it", async ({
+  page,
+  context,
+  request,
+}) => {
+  const user = uniqueUser();
+  await signUp(page, user);
+
+  const events = await logInWhileSignOutIsHeld(page, request, user);
+
+  // The login has been sent only after the old answer had arrived...
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("heading", PROJECTS_HEADING)).toBeVisible();
+  expect(events).toEqual(["logout answered", "login sent"]);
+
+  // ...so the new login's cookies are there...
   const names = (await context.cookies()).map((cookie) => cookie.name);
   expect(names).toContain("refresh_token");
   expect(names).toContain("csrf_token");
 
-  // 5. ...so that after a reload the person is still signed in.
+  // ...and after a reload the person is still signed in.
   await page.reload();
   await expect(page.getByRole("heading", PROJECTS_HEADING)).toBeVisible();
   await expect(page).toHaveURL(/\/app$/);
+});
+
+test("signing in as someone else while a sign-out answer is held ends as that other person", async ({
+  page,
+  request,
+}) => {
+  const first = uniqueUser();
+  const second = uniqueUser();
+  await createAccount(request, second);
+  await signUp(page, first);
+
+  const events = await logInWhileSignOutIsHeld(page, request, second);
+
+  await expect(page).toHaveURL(/\/app$/);
+  expect(events).toEqual(["logout answered", "login sent"]);
+  await expect(page.getByText(second.displayName, { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", PROJECTS_HEADING)).toBeVisible();
+  await expect(page.getByText(second.displayName, { exact: true })).toBeVisible();
+  await expect(page.getByText(first.displayName, { exact: true })).toHaveCount(0);
 });
 
 test("a sign-out whose answer is held has already ended the login on the server", async ({

@@ -254,6 +254,7 @@ PR 1 merged as #8 and PR 2 as #9. PR 2 went in **without the Playwright tests** 
 for it (decision of 2026-11-04, see `2026-11-04-push-web-auth-screens.md`). They became their own
 PR 3 (`2026-11-04-playwright-e2e.md`), which proves the `Set-Cookie` round trip through the dev
 proxy and axe in a real browser in both colour schemes. Finding 2 of the review above turned out to
-be **real**: a sign-out answer that arrives after a new login deletes the new login's cookies. It is
-recorded as an expected-failure test and needs its own fix PR. Storybook is still its own small PR
+be **real**: a sign-out answer that arrives after a new login deletes the new login's cookies. It
+was recorded as an expected-failure test and **fixed afterwards** (`2026-11-05-sign-out-login-race.md`:
+a login waits for the tab's pending sign-out request). Storybook is still its own small PR
 before Step 4.
