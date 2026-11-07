@@ -93,12 +93,13 @@ Rules for the web app, and how it follows them:
   The page can only read the CSRF cookie of its own host, and a `SameSite=Strict` cookie is not
   sent between `localhost` and `127.0.0.1`. Never loosen the cookie to `SameSite=None` or add a
   `Domain` to work around this. In development the Vite server is that proxy: it forwards `/auth`
-  to the API (`API_URL`, default `http://127.0.0.1:3000`), so open the page at
-  **http://127.0.0.1:5173**, not `localhost`. Each new API area (for example `/projects`) is added
-  to the list in `apps/web/src/lib/dev-proxy.ts`, and the same list becomes the reverse-proxy rule
-  in production. Because of this, `/auth` and everything below it (`/auth/...`) is reserved: no
-  page may use that address. Names that only start the same way (`/authors`, `/auth-callback`)
-  stay pages.
+  and `/projects` to the API (`API_URL`, default `http://127.0.0.1:3000`), so open the page at
+  **http://127.0.0.1:5173**, not `localhost`. Each new API area is added to the list in
+  `apps/web/src/lib/dev-proxy.ts`, and the same list becomes the reverse-proxy rule in
+  production. Because of this, `/auth` and `/projects` and everything below them (`/auth/...`,
+  `/projects/...`) are reserved: no page may use those addresses (the writer's own screens will
+  live under `/app`). Names that only start the same way (`/authors`, `/auth-callback`,
+  `/projects-old`) stay pages.
 - **`vite preview` needs its own origin allowed.** It serves the production build on
   `http://127.0.0.1:4173`, which is not in the default `CORS_ORIGINS` (the API refuses the `Origin`
   of every sign-in with a 403). Add it to `CORS_ORIGINS` in `.env` to use the preview. A
@@ -131,6 +132,22 @@ Rules for the web app, and how it follows them:
   refused, a request that is not answered within 15 seconds is given up as a network error, and a
   redirect is never followed, so a misbehaving proxy cannot hand the token or the CSRF code to
   another host. Text from the server is cut and cleaned before the app sees it (`lib/api/problem.ts`).
+
+## Projects
+
+All under `/projects`, all need `Authorization: Bearer <access token>`; the full reference is at
+`/docs/`. A person only ever reaches their own projects: someone else's project is answered with
+404, exactly like one that does not exist.
+
+| Route                  | Gives                                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /projects`        | `{ items, nextCursor }`, newest updated first (`?limit=` 1 to 100, default 20; `?cursor=` is the previous `nextCursor`)         |
+| `POST /projects`       | 201 and the new project (`title` 1 to 200 characters, `format` `screenplay`, `prose` or `other`, optional `logline` up to 1000) |
+| `GET /projects/:id`    | the project                                                                                                                     |
+| `PATCH /projects/:id`  | the changed project (send only what changes; `logline: null` clears it)                                                         |
+| `DELETE /projects/:id` | 204. Permanent: the project's documents and analyses are deleted with it                                                        |
+
+Creating, changing and deleting share a limit of 60 per minute per person.
 
 ## Checks
 
