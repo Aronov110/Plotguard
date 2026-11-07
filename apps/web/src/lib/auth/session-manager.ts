@@ -59,9 +59,16 @@ export interface SessionManager {
   start(): Promise<void>;
   /** Cancels the refresh timer and stops listening to other tabs, for example when the page unmounts. */
   stop(): void;
-  /** @throws ApiError, NetworkError or ResponseShapeError; the state does not change then. */
+  /**
+   * Signs in. If a sign-out request from this tab is still in flight, waits for it to finish
+   * first (at most the request timeout), so its answer cannot delete the new login's cookies.
+   * @throws ApiError, NetworkError or ResponseShapeError; the state does not change then.
+   */
   login(input: LoginInput): Promise<void>;
-  /** @throws ApiError, NetworkError or ResponseShapeError; the state does not change then. */
+  /**
+   * Creates an account and signs in. Waits for a pending sign-out like {@link SessionManager.login}.
+   * @throws ApiError, NetworkError or ResponseShapeError; the state does not change then.
+   */
   register(input: RegisterInput): Promise<void>;
   /**
    * Signs out on this page at once, tells the other tabs, then tells the server.
@@ -150,6 +157,9 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
   // before one of them must not bring the old login back to life when its answer arrives, and a
   // caller that comes after one must not wait for a refresh that belongs to the old login.
   let epoch = 0;
+  // Sign-out requests that have been sent and not answered yet. Their answer deletes the login
+  // cookies whenever it arrives, so a new login must not start before they are over (see `login`).
+  const pendingLogouts = new Set<Promise<void>>();
 
   function setState(next: SessionState): void {
     if (next === state) return;
@@ -209,6 +219,28 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
   function beginSession(session: SessionResponse): void {
     epoch++;
     applySession(session);
+  }
+
+  /** Sends the logout request and keeps it on the pending list until it succeeds or fails. */
+  function sendLogout(): Promise<void> {
+    const request: Promise<void> = (async () => {
+      await deps.api.logout();
+    })().finally(() => {
+      pendingLogouts.delete(request);
+    });
+    pendingLogouts.add(request);
+    return request;
+  }
+
+  /**
+   * Resolves once no sign-out request is in flight. Loops because another sign-out can start while
+   * this one waits. It cannot wait for long: every request ends by itself (the HTTP layer gives up
+   * after its timeout). Never rejects; how a sign-out ended is its own caller's business.
+   */
+  async function whenLogoutsAreOver(): Promise<void> {
+    while (pendingLogouts.size > 0) {
+      await Promise.allSettled([...pendingLogouts]);
+    }
   }
 
   async function requestRefresh(): Promise<SessionResponse> {
@@ -306,10 +338,14 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
     },
 
     async login(input) {
+      // Without this, a logout answer that arrives after the new login's answer would delete the
+      // new cookies, and the next page load would find nobody signed in.
+      if (pendingLogouts.size > 0) await whenLogoutsAreOver();
       beginSession(await deps.api.login(input));
     },
 
     async register(input) {
+      if (pendingLogouts.size > 0) await whenLogoutsAreOver();
       beginSession(await deps.api.register(input));
     },
 
@@ -324,7 +360,7 @@ export function createSessionManager(overrides: Partial<SessionManagerDeps> = {}
         deps.reportError(error);
       }
       try {
-        await deps.api.logout();
+        await sendLogout();
         return true;
       } catch (error) {
         if (!isExpected(error)) throw error;
