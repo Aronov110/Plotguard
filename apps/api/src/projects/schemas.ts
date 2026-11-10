@@ -9,15 +9,15 @@ export const LOGLINE_MAX_CHARACTERS = 1000;
  * The database counts characters (code points). JavaScript's `length` counts UTF-16 units, where an
  * emoji is two, so a title of 150 emoji would be refused although the database accepts it.
  */
-const characters = (text: string): number => [...text].length;
+export const characters = (text: string): number => [...text].length;
 
 /** PostgreSQL text cannot hold a NUL character; it would fail with a 500 instead of a 400. */
-const hasNoNul = (text: string): boolean => !text.includes("\u0000");
+export const hasNoNul = (text: string): boolean => !text.includes("\u0000");
 
 /** Stops absurd values early; the exact limits are the checks below. 4 units cover any character. */
-const unitCeiling = (maxCharacters: number): number => maxCharacters * 4;
+export const unitCeiling = (maxCharacters: number): number => maxCharacters * 4;
 
-const title = z
+export const title = z
   .string()
   .trim()
   .max(unitCeiling(TITLE_MAX_CHARACTERS), { error: "The title is too long." })

@@ -107,6 +107,38 @@ export class ConflictError extends AppError {
   }
 }
 
+/** 412: the `If-Match` version is well formed but no longer the current one (someone saved since). */
+export class PreconditionFailedError extends AppError {
+  constructor(
+    detail = "This was changed since you loaded it. Reload it and try again.",
+    options: CauseOption = {},
+  ) {
+    super({
+      status: 412,
+      code: "precondition-failed",
+      title: "Precondition Failed",
+      detail,
+      ...options,
+    });
+  }
+}
+
+/** 428: the request must say which version it is based on (`If-Match`) and did not. */
+export class PreconditionRequiredError extends AppError {
+  constructor(
+    detail = "Send the version you loaded in the If-Match header.",
+    options: CauseOption = {},
+  ) {
+    super({
+      status: 428,
+      code: "precondition-required",
+      title: "Precondition Required",
+      detail,
+      ...options,
+    });
+  }
+}
+
 /** 429: too many requests. Sets `Retry-After` in whole seconds (minimum 1). */
 export class RateLimitError extends AppError {
   constructor(retryAfterSeconds: number, options: CauseOption = {}) {

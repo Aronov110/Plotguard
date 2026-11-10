@@ -149,6 +149,46 @@ All under `/projects`, all need `Authorization: Bearer <access token>`; the full
 
 Creating, changing and deleting share a limit of 60 per minute per person.
 
+## Documents
+
+The outline (acts, chapters, scenes) and the text of one project. All under
+`/projects/:projectId/documents`, all need `Authorization: Bearer <access token>`; the full reference
+is at `/docs/`. A project or document of someone else, or a document reached through the wrong
+project, is answered with 404, exactly like one that does not exist. Every answer is
+`Cache-Control: private, no-store`.
+
+| Route                    | Gives                                                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| `GET …/documents`        | `{ items }`: the whole outline without text, each act followed by its scenes (not paginated) |
+| `POST …/documents`       | 201 and the new item (`title` 1 to 200; optional `parentId`, `position`, `content`)          |
+| `GET …/documents/:id`    | the item with its text, `version`, and the same version as `ETag`                            |
+| `PATCH …/documents/:id`  | the changed item. Send only what changes. **Needs `If-Match`**                               |
+| `DELETE …/documents/:id` | 204. Permanent: the children of an act or chapter are deleted with it                        |
+
+- **Saving needs the version you read.** Send the `ETag` of the `GET` (or of the last save) as
+  `If-Match`. Missing: 428. Malformed (`*`, a list, no quotes): 400. Out of date, because another
+  tab saved first: 412, so load the item again instead of overwriting. The weak form `W/"3"` is
+  accepted on purpose, because proxies that compress answers turn strong tags weak. A move of
+  other items (renumbering the siblings) does not change an item's own `version`. Every accepted
+  save of the item itself raises its `version`, even when the values sent equal the stored ones.
+  `DELETE` needs no `If-Match`: it removes the item whatever its version.
+- **Shape.** One level of nesting: an item under an act or chapter cannot hold items itself, and an
+  item that has children cannot be moved under another. `position` counts from 0 among the
+  siblings, without gaps; leaving it out appends. A position past the end is 400. `parentId: null`
+  moves to the top level. On a move, `position` is counted without the item itself.
+- **Text.** Up to 200,000 characters (an emoji is one), stored exactly as sent: never trimmed or
+  cleaned, so the web screen must show it as text, never as HTML. A NUL character or a broken
+  emoji (a lone surrogate half) is refused with 400. `wordCount` is counted by the server as runs
+  of non-space characters; Chinese, Japanese and Thai, written without spaces, count as one word per
+  run.
+- **Sizes.** At most 1,000 items per project (the 1,001st is 409). Create and `PATCH` accept bodies
+  up to 2.5 MiB (200,000 emoji written as JSON escapes are 2.4 MB); larger is 413.
+- **Changes are serialised per project.** Every create, save, move and delete first locks the
+  project, so one change at a time runs per project, and it also moves the project to the top of
+  `GET /projects`. Two tabs of one writer therefore queue instead of racing.
+- Creating, saving, moving and deleting share a limit of 120 per minute per person, separate from
+  the projects limit.
+
 ## Checks
 
 ```sh

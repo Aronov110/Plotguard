@@ -54,6 +54,17 @@ export function registerOpenApi(app: FastifyInstance): void {
             "signed in, 404 no such project, 413 body too large, 415 not JSON, 429 too many " +
             "changes (see `Retry-After`).",
         },
+        {
+          name: "documents",
+          description:
+            "The outline (acts, chapters, scenes) and the text of one of the signed-in person's " +
+            "projects. Every route needs the access token. A project or document of someone " +
+            "else is answered with 404, like one that does not exist. Saving needs `If-Match` " +
+            "with the `ETag` that was read. Errors are Problem Details: 400 invalid input, " +
+            "parent, position or `If-Match`, 401 not signed in, 404 no such project or document, " +
+            "409 the project is full, 412 out of date, 413 body too large, 415 not JSON, 428 " +
+            "`If-Match` missing, 429 too many changes (see `Retry-After`).",
+        },
       ],
       components: {
         securitySchemes: {
