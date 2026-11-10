@@ -5,6 +5,7 @@ import type { AuthLimits } from "../auth/limits.ts";
 import { createPasswordHasher } from "../auth/password.ts";
 import type { DatabaseHandle } from "../db/client.ts";
 import { connectTestDatabase, resetTables } from "../db/test-support/test-database.ts";
+import type { DocumentLimits } from "../documents/limits.ts";
 import type { ProjectLimits } from "../projects/limits.ts";
 import { LogCollector } from "./log-collector.ts";
 import { testEnv } from "./test-app.ts";
@@ -37,6 +38,7 @@ export interface AuthTestOptions {
   readonly env?: Readonly<Record<string, string>>;
   readonly limits?: Partial<AuthLimits>;
   readonly projectLimits?: ProjectLimits;
+  readonly documentLimits?: DocumentLimits;
 }
 
 /**
@@ -54,6 +56,7 @@ export async function buildAuthTestApp(options: AuthTestOptions = {}): Promise<A
     passwordHasher: createPasswordHasher({ params: CHEAP }),
     authLimits: { ...NO_LIMITS, ...options.limits },
     ...(options.projectLimits === undefined ? {} : { projectLimits: options.projectLimits }),
+    ...(options.documentLimits === undefined ? {} : { documentLimits: options.documentLimits }),
   });
   await app.ready();
   return { app, handle, logs, close: () => app.close() };

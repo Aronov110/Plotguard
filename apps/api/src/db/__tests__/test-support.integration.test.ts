@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDatabase, type DatabaseHandle } from "../client.ts";
-import { runMigrations } from "../migrate.ts";
+import { MIGRATIONS_FOLDER, runMigrations } from "../migrate.ts";
 import { insertProject, insertUser } from "../test-support/factories.ts";
 import {
   connectTestDatabase,
@@ -75,7 +77,13 @@ describe("resetTables", () => {
       const history = await scratchHandle.pool.query<{ count: string }>(
         "select count(*) from drizzle.__drizzle_migrations",
       );
-      expect(Number(history.rows[0]?.count)).toBe(2);
+      // One row per migration file in the journal: asks the journal, so a new migration does not
+      // break this test.
+      const journal = JSON.parse(
+        readFileSync(join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8"),
+      ) as { entries: unknown[] };
+      expect(journal.entries.length).toBeGreaterThan(0);
+      expect(Number(history.rows[0]?.count)).toBe(journal.entries.length);
     } finally {
       await scratchHandle.close();
       await scratch.drop();

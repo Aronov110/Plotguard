@@ -10,12 +10,15 @@ import { createAccessTokens, createCsrfTokens } from "./auth/tokens.ts";
 import type { Env } from "./config/env.ts";
 import { buildLoggerOptions } from "./config/logger.ts";
 import type { Database, DatabaseHandle } from "./db/client.ts";
+import { DEFAULT_DOCUMENT_LIMITS, type DocumentLimits } from "./documents/limits.ts";
+import { createDocumentsService } from "./documents/service.ts";
 import { frameworkErrorHandler, registerErrorHandling } from "./errors/error-handler.ts";
 import { registerOpenApi } from "./plugins/openapi.ts";
 import { registerSecurity } from "./plugins/security.ts";
 import { DEFAULT_PROJECT_LIMITS, type ProjectLimits } from "./projects/limits.ts";
 import { createProjectsService } from "./projects/service.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { documentsRoutes } from "./routes/documents.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { projectsRoutes } from "./routes/projects.ts";
 
@@ -50,6 +53,8 @@ export interface AppDependencies {
   readonly authLimits?: AuthLimits;
   /** Replaces the limits on the project routes. Tests use them to reach a limit quickly. */
   readonly projectLimits?: ProjectLimits;
+  /** Replaces the limits on the document routes. Tests use them to reach a limit quickly. */
+  readonly documentLimits?: DocumentLimits;
 }
 
 /** Builds the Fastify app without listening, so tests can use `app.inject()`. */
@@ -132,6 +137,12 @@ export function buildApp(env: Env, deps: AppDependencies): FastifyInstance {
     auth,
     projects: createProjectsService(deps.database.db),
     limits: deps.projectLimits ?? DEFAULT_PROJECT_LIMITS,
+  });
+  app.register(documentsRoutes, {
+    prefix: "/projects/:projectId/documents",
+    auth,
+    documents: createDocumentsService(deps.database.db),
+    limits: deps.documentLimits ?? DEFAULT_DOCUMENT_LIMITS,
   });
 
   return app;

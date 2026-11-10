@@ -30,6 +30,11 @@ export const documents = pgTable(
     content: text("content").notNull().default(""),
     position: integer("position").notNull(),
     wordCount: integer("word_count").notNull().default(0),
+    /**
+     * Counts the changes to this document's own title, text and place. A save must name the version
+     * it read (`If-Match`), so a stale save is refused instead of overwriting a newer one.
+     */
+    version: integer("version").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -49,6 +54,7 @@ export const documents = pgTable(
     check("documents_title_length", sql`char_length(${table.title}) between 1 and 200`),
     check("documents_position_non_negative", sql`${table.position} >= 0`),
     check("documents_word_count_non_negative", sql`${table.wordCount} >= 0`),
+    check("documents_version_positive", sql`${table.version} >= 1`),
     check("documents_not_own_parent", sql`${table.parentId} is distinct from ${table.id}`),
   ],
 );
