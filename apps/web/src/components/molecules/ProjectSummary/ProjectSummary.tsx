@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { Link } from "react-router";
 import type { Project, ProjectFormat } from "../../../lib/api/projects-api.ts";
 import { formatChangedDate } from "../../../lib/projects/format-changed-date.ts";
 import "./ProjectSummary.css";
@@ -9,17 +10,25 @@ const FORMAT_LABELS: Readonly<Record<ProjectFormat, string>> = {
   other: "Other",
 };
 
+export interface ProjectSummaryProps {
+  readonly project: Project;
+  /** Where the title leads (the writing screen). Without it the title is plain text. */
+  readonly to?: string;
+}
+
 /**
  * What a project looks like in the list: title, format, last change and logline. Everything the
  * person wrote is shown as plain text, whatever it contains.
  */
-export function ProjectSummary({ project }: { readonly project: Project }): ReactElement {
+export function ProjectSummary({ project, to }: ProjectSummaryProps): ReactElement {
   const changed = formatChangedDate(project.updatedAt);
   const hasLogline = project.logline !== null && project.logline.trim() !== "";
 
   return (
     <>
-      <h3 className="project-summary__title">{project.title}</h3>
+      <h3 className="project-summary__title">
+        {to === undefined ? project.title : <Link to={to}>{project.title}</Link>}
+      </h3>
       <p className="project-summary__meta">
         {FORMAT_LABELS[project.format]}
         {changed === undefined ? null : (

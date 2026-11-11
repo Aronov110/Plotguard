@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../../../../lib/auth/session.tsx";
 import type { ProjectsView } from "../../../../lib/projects/use-projects.ts";
@@ -32,20 +33,22 @@ function renderList(view: ProjectsView) {
   const onUnchanged = vi.fn();
   const onDeleted = vi.fn();
   const element = (next: ProjectsView) => (
-    <AuthProvider>
-      <h2 id={HEADING_ID} tabIndex={-1}>
-        All your projects
-      </h2>
-      <ProjectList
-        view={next}
-        onRetry={onRetry}
-        onLoadMore={onLoadMore}
-        headingId={HEADING_ID}
-        onSaved={onSaved}
-        onUnchanged={onUnchanged}
-        onDeleted={onDeleted}
-      />
-    </AuthProvider>
+    <MemoryRouter>
+      <AuthProvider>
+        <h2 id={HEADING_ID} tabIndex={-1}>
+          All your projects
+        </h2>
+        <ProjectList
+          view={next}
+          onRetry={onRetry}
+          onLoadMore={onLoadMore}
+          headingId={HEADING_ID}
+          onSaved={onSaved}
+          onUnchanged={onUnchanged}
+          onDeleted={onDeleted}
+        />
+      </AuthProvider>
+    </MemoryRouter>
   );
   const result = render(element(view));
   return {

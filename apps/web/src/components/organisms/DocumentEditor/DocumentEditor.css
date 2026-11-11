@@ -1,0 +1,42 @@
+.document-editor__title {
+  margin: 0 0 var(--space-3);
+  font-size: 1.375rem;
+  overflow-wrap: anywhere;
+}
+
+.document-editor__text {
+  display: block;
+  width: 100%;
+  min-height: 24rem;
+  padding: var(--space-3);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-1);
+  background: var(--color-surface);
+  color: var(--color-text);
+  /* The writing font: a screenplay is laid out in a monospaced one. */
+  font-family: var(--font-writing);
+  font-size: 1rem;
+  line-height: 1.6;
+  /* Only taller or shorter: wider would push the page sideways on a narrow screen. */
+  resize: vertical;
+}
+
+.document-editor__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  justify-content: space-between;
+  margin-top: var(--space-2);
+}
+
+.document-editor__counts {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.document-editor__problem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}

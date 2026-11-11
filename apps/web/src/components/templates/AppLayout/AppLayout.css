@@ -37,6 +37,11 @@
   padding: var(--space-4) var(--space-3);
 }
 
+/* Room for two panes side by side. */
+.app-layout__main--wide {
+  max-width: 90rem;
+}
+
 /* The main area gets the focus from the skip link; it is not something to press, so no ring. */
 .app-layout__main:focus {
   outline: none;

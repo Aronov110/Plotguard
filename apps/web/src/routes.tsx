@@ -5,6 +5,7 @@ import { HomePage } from "./components/pages/HomePage/HomePage.tsx";
 import { LoginPage } from "./components/pages/LoginPage/LoginPage.tsx";
 import { NotFoundPage } from "./components/pages/NotFoundPage/NotFoundPage.tsx";
 import { RegisterPage } from "./components/pages/RegisterPage/RegisterPage.tsx";
+import { WritingPage } from "./components/pages/WritingPage/WritingPage.tsx";
 import { RedirectIfSignedIn } from "./components/templates/RedirectIfSignedIn/RedirectIfSignedIn.tsx";
 import { RequireAuth } from "./components/templates/RequireAuth/RequireAuth.tsx";
 
@@ -23,6 +24,7 @@ export function AppRoutes(): ReactElement {
       </Route>
       <Route element={<RequireAuth />}>
         <Route path="/app" element={<AppHomePage />} />
+        <Route path="/app/projects/:projectId" element={<WritingPage />} />
       </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

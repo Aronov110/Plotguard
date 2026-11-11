@@ -1,0 +1,13 @@
+.add-item {
+  margin-top: var(--space-4);
+}
+
+.add-item__heading {
+  margin: 0 0 var(--space-2);
+  font-size: 1.25rem;
+}
+
+.add-item__note {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+}

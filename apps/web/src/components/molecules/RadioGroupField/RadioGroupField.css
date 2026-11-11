@@ -34,6 +34,12 @@
   accent-color: var(--color-accent);
 }
 
+/* The words next to the circle may hold a title the person wrote: a very long one must wrap. */
+.radio-group__option > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .radio-group__label {
   display: block;
   padding-top: 0.2rem;
