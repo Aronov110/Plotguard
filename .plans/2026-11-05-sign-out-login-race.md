@@ -85,7 +85,8 @@ at once, so the normal path is unchanged.
 - The one failure is an older test, `cookies-and-storage.e2e.ts` "both cookies are gone after
   signing out" (WebKit): it reads the cookies right after the URL changes to /login, before the
   sign-out answer has arrived. It is a timing mistake in that test, not in this fix (no login
-  involved). Not changed here; flagged for its own small fix (wait with `expect.poll`).
+  involved). Not changed here; flagged for its own small fix (wait with `expect.poll`). Fixed later
+  in `2026-11-11-sign-out-cookie-test.md`.
 - One more WebKit failure in ~100 runs of the new tests: the Email field was empty after a fill
   (trace: no login request was ever sent, so it happened before the code of this fix runs). Cause
   not found; the probe with 40 plain sign-outs and 85 repeats of the new tests did not reproduce it.
