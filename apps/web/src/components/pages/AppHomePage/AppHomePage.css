@@ -1,0 +1,8 @@
+.projects-page__section {
+  margin-top: var(--space-5);
+}
+
+.projects-page__section > h2 {
+  margin: 0 0 var(--space-3);
+  font-size: 1.375rem;
+}

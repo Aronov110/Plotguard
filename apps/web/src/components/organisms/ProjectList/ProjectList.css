@@ -1,0 +1,16 @@
+.project-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-list__problem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.project-list__more {
+  margin-top: var(--space-3);
+}
