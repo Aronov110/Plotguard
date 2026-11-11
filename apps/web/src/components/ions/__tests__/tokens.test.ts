@@ -44,6 +44,7 @@ const PAIRS: readonly (readonly [string, string, number, string])[] = [
   ["color-accent", "color-bg", 4.5, "links and headings on the page"],
   ["color-accent", "color-surface", 4.5, "links and headings on a card"],
   ["color-on-accent", "color-accent", 4.5, "text on a primary button"],
+  ["color-on-danger", "color-danger", 4.5, "text on a delete button"],
   ["color-danger", "color-bg", 4.5, "error text on the page"],
   ["color-danger", "color-surface", 4.5, "error text on a card"],
   ["color-danger", "color-danger-bg", 4.5, "error text in an error box"],

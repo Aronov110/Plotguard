@@ -498,3 +498,196 @@ describe("useProjects: leaving the screen", () => {
     }
   });
 });
+
+describe("useProjects: a project that was changed", () => {
+  const [a, b, c] = [
+    makeProject({ title: "A" }),
+    makeProject({ title: "B" }),
+    makeProject({ title: "C" }),
+  ];
+
+  async function shown() {
+    answerProjectList(projectPage([a, b, c], "cursor-2"));
+    const rendered = await renderProjects();
+    await waitFor(() => expect(rendered.result.current.view.status).toBe("ready"));
+    return rendered;
+  }
+
+  it("goes to the top of the list, in place of its old version, and is announced", async () => {
+    const { result } = await shown();
+    act(() => {
+      result.current.replace({ ...b, title: "B, renamed" }, "Project “B, renamed” saved.");
+    });
+    expect(titles(result)).toEqual(["B, renamed", "A", "C"]);
+    expect(ready(result).announcement).toEqual({ text: "Project “B, renamed” saved.", serial: 1 });
+  });
+
+  it("is shown once however many times it is changed", async () => {
+    const { result } = await shown();
+    act(() => {
+      result.current.replace({ ...c, title: "C1" }, "first");
+    });
+    act(() => {
+      result.current.replace({ ...c, title: "C2" }, "second");
+    });
+    expect(titles(result)).toEqual(["C2", "A", "B"]);
+  });
+
+  it("tells two announcements with the same words apart", async () => {
+    const { result } = await shown();
+    act(() => {
+      result.current.replace({ ...a }, "Same words.");
+    });
+    expect(ready(result).announcement?.serial).toBe(1);
+    act(() => {
+      result.current.replace({ ...a }, "Same words.");
+    });
+    expect(ready(result).announcement).toEqual({ text: "Same words.", serial: 2 });
+  });
+
+  it("is not shown twice when a later page returns its old version", async () => {
+    const x = makeProject({ title: "X, on page two" });
+    answerProjectList(projectPage([a], "cursor-2"), projectPage([x], null));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+
+    act(() => {
+      result.current.replace({ ...x, title: "X, renamed" }, "saved");
+    });
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => expect(ready(result).hasMore).toBe(false));
+    expect(titles(result)).toEqual(["X, renamed", "A"]);
+  });
+
+  it("clears the note about the last page that was loaded", async () => {
+    answerProjectList(projectPage([a], "c2"), projectPage([b], null));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => expect(ready(result).justLoaded).toBeDefined());
+
+    act(() => {
+      result.current.replace({ ...a, title: "A2" }, "saved");
+    });
+    expect(ready(result).justLoaded).toBeUndefined();
+  });
+});
+
+describe("useProjects: a project that was deleted", () => {
+  const [a, b, c] = [
+    makeProject({ title: "A" }),
+    makeProject({ title: "B" }),
+    makeProject({ title: "C" }),
+  ];
+
+  it("leaves the list, wherever it was, and is announced", async () => {
+    answerProjectList(projectPage([a, b, c], "cursor-2"));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+
+    act(() => {
+      result.current.remove(b.id, "Project “B” deleted.");
+    });
+    expect(titles(result)).toEqual(["A", "C"]);
+    expect(ready(result).announcement).toEqual({ text: "Project “B” deleted.", serial: 1 });
+  });
+
+  it("leaves the list when it was created on this screen", async () => {
+    answerProjectList(projectPage([a]));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+    const fresh = makeProject({ title: "Fresh" });
+    act(() => {
+      result.current.add(fresh);
+    });
+    expect(titles(result)).toEqual(["Fresh", "A"]);
+
+    act(() => {
+      result.current.remove(fresh.id, "deleted");
+    });
+    expect(titles(result)).toEqual(["A"]);
+  });
+
+  it("empties the list when the last project is deleted", async () => {
+    answerProjectList(projectPage([a]));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+    act(() => {
+      result.current.remove(a.id, "deleted");
+    });
+    expect(ready(result)).toMatchObject({ items: [], hasMore: false });
+  });
+
+  it("does not change the list for an id it does not know, but still announces", async () => {
+    answerProjectList(projectPage([a, b]));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+    act(() => {
+      result.current.remove("unknown", "gone");
+    });
+    expect(titles(result)).toEqual(["A", "B"]);
+    expect(ready(result).announcement?.text).toBe("gone");
+  });
+
+  it("keeps the place in the pages: the next page is asked for with the same cursor", async () => {
+    const calls = answerProjectList(projectPage([a, b], "cursor-2"), projectPage([c], null));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+
+    act(() => {
+      result.current.remove(a.id, "deleted");
+    });
+    expect(ready(result).hasMore).toBe(true);
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => expect(titles(result)).toEqual(["B", "C"]));
+    expect(calls[1]?.url.searchParams.get("cursor")).toBe("cursor-2");
+  });
+});
+
+describe("useProjects: announcing without a change", () => {
+  it("announces and leaves the list as it is", async () => {
+    const a = makeProject({ title: "A" });
+    answerProjectList(projectPage([a]));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+
+    act(() => {
+      result.current.announce("No changes to save.");
+    });
+    expect(titles(result)).toEqual(["A"]);
+    expect(ready(result).announcement).toEqual({ text: "No changes to save.", serial: 1 });
+  });
+
+  it("is forgotten when more projects are loaded", async () => {
+    answerProjectList(projectPage([makeProject()], "c2"), projectPage([makeProject()], null));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+    act(() => {
+      result.current.announce("Something.");
+    });
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => expect(ready(result).justLoaded).toBeDefined());
+    expect(ready(result).announcement).toBeUndefined();
+  });
+
+  it("is forgotten when a project is created", async () => {
+    answerProjectList(projectPage([]));
+    const { result } = await renderProjects();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+    act(() => {
+      result.current.announce("Something.");
+    });
+    act(() => {
+      result.current.add(makeProject());
+    });
+    expect(ready(result).announcement).toBeUndefined();
+  });
+});

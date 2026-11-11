@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, NetworkError, ResponseShapeError } from "../../api/problem.ts";
 import {
+  describeDeleteError,
   describeListError,
   describeProjectError,
   summaryItems,
@@ -110,9 +111,16 @@ describe("describeProjectError", () => {
     ]);
   });
 
+  it("says that the project no longer exists after a 404, not the technical text", () => {
+    const feedback = describeProjectError(apiError(404));
+    expect(feedback.general).toEqual(["This project no longer exists."]);
+    expect(feedback.fieldErrors).toEqual({});
+    expect(JSON.stringify(feedback)).not.toContain("technical detail");
+  });
+
   it.each([
     ["a 500", apiError(500)],
-    ["a 404", apiError(404)],
+    ["a 409", apiError(409)],
     ["a wrong-shaped answer", new ResponseShapeError("bad shape with SECRET")],
     ["a plain error", new Error("SECRET")],
     ["something that is not an error", "SECRET"],
@@ -200,5 +208,36 @@ describe("summaryItems", () => {
 
   it("is empty when nothing is wrong", () => {
     expect(summaryItems({ fieldErrors: {}, general: [] }, ids)).toEqual([]);
+  });
+});
+
+describe("describeDeleteError", () => {
+  it("says that the server cannot be reached", () => {
+    expect(describeDeleteError(new NetworkError())).toBe(
+      "Can't reach the server. Check your connection and try again.",
+    );
+  });
+
+  it("says how long to wait after a 429, and when the service is busy", () => {
+    expect(describeDeleteError(apiError(429, { retryAfterSeconds: 9 }))).toBe(
+      "Too many requests. Try again in 9 seconds.",
+    );
+    expect(describeDeleteError(apiError(503))).toBe("The service is busy. Try again in a moment.");
+  });
+
+  it("asks for a new login after a 401", () => {
+    expect(describeDeleteError(apiError(401))).toBe("Your login has ended. Please log in again.");
+  });
+
+  it.each([
+    ["a 500", apiError(500)],
+    ["a 404", apiError(404)],
+    ["a wrong-shaped answer", new ResponseShapeError("SECRET")],
+    ["a plain error", new Error("SECRET")],
+    ["nothing", undefined],
+  ])("gives one general sentence for %s, never the technical text", (_name, error) => {
+    const message = describeDeleteError(error);
+    expect(message).toBe("The project could not be deleted. Please try again.");
+    expect(message).not.toContain("SECRET");
   });
 });

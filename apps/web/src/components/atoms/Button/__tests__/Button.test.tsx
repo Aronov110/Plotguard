@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../../../test-support/a11y.ts";
 import { Button } from "../Button.tsx";
@@ -39,6 +40,25 @@ describe("Button", () => {
     rerender(<Button variant="secondary">One</Button>);
     expect(screen.getByRole("button")).toHaveClass("button", "button--secondary");
     expect(screen.getByRole("button")).not.toHaveClass("button--primary");
+  });
+
+  it("can be a danger button, for an action that cannot be undone", () => {
+    render(<Button variant="danger">Delete project</Button>);
+    expect(screen.getByRole("button", { name: "Delete project" })).toHaveClass(
+      "button",
+      "button--danger",
+    );
+    expect(screen.getByRole("button")).not.toHaveClass("button--primary");
+  });
+
+  it("passes a ref to the button, so a screen can move the focus to it", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <Button variant="danger" ref={ref}>
+        Go
+      </Button>,
+    );
+    expect(ref.current).toBe(screen.getByRole("button"));
   });
 
   it("calls onClick when clicked, and when pressed with Enter or Space", async () => {
@@ -136,6 +156,10 @@ describe("Button", () => {
       <div>
         <Button>One</Button>
         <Button variant="secondary">Two</Button>
+        <Button variant="danger">Danger</Button>
+        <Button variant="danger" busy>
+          Busy danger
+        </Button>
         <Button busy>Three</Button>
         <Button disabled>Four</Button>
       </div>,

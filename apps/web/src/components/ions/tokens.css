@@ -13,6 +13,7 @@
   --color-focus: #0b57d0;
   --color-border: #7d7266;
   --color-danger: #b3261e;
+  --color-on-danger: #ffffff;
   --color-danger-bg: #fdecea;
   --color-success: #1b6a38;
   --color-success-bg: #e6f4ea;
@@ -43,6 +44,7 @@
     --color-focus: #8ab4f8;
     --color-border: #8f8576;
     --color-danger: #f4a6a0;
+    --color-on-danger: #16130f;
     --color-danger-bg: #3a1b19;
     --color-success: #8fd3a4;
     --color-success-bg: #16301f;

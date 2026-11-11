@@ -64,6 +64,9 @@ export function describeProjectError(error: unknown): ProjectFormFeedback {
       return describeIssues(error);
     case 401:
       return onlyGeneral("Your login has ended. Please log in again.");
+    case 404:
+      // Only a change to an existing project can get here: it was deleted, perhaps in another tab.
+      return onlyGeneral("This project no longer exists.");
     case 429:
       return onlyGeneral(describeTooManyRequests(error.retryAfterSeconds));
     case 503:
@@ -71,6 +74,20 @@ export function describeProjectError(error: unknown): ProjectFormFeedback {
     default:
       return onlyGeneral(GENERIC);
   }
+}
+
+/**
+ * The words for a project that could not be deleted. One sentence. (A 404 is not an error here: the
+ * project is gone, which is what the person wanted, and the caller treats it as a success.)
+ */
+export function describeDeleteError(error: unknown): string {
+  if (error instanceof NetworkError) return NO_CONNECTION;
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "Your login has ended. Please log in again.";
+    if (error.status === 429) return describeTooManyRequests(error.retryAfterSeconds);
+    if (error.status === 503) return "The service is busy. Try again in a moment.";
+  }
+  return "The project could not be deleted. Please try again.";
 }
 
 /**

@@ -1,9 +1,13 @@
-import type { ComponentPropsWithoutRef, MouseEvent, ReactElement } from "react";
+import type { ComponentPropsWithRef, MouseEvent, ReactElement } from "react";
 import "./Button.css";
 
-export interface ButtonProps extends Omit<ComponentPropsWithoutRef<"button">, "className"> {
-  /** `primary` is the main action of a screen; `secondary` is for anything else. */
-  readonly variant?: "primary" | "secondary";
+export interface ButtonProps extends Omit<ComponentPropsWithRef<"button">, "className"> {
+  /**
+   * `primary` is the main action of a screen; `secondary` is for anything else; `danger` is for an
+   * action that cannot be undone, such as a delete. Its meaning is in its words too, never only in
+   * its colour.
+   */
+  readonly variant?: "primary" | "secondary" | "danger";
   /**
    * The action is running. The button keeps its label and its place in the tab order (so a keyboard
    * user does not lose their spot) but ignores presses, which stops a double click from sending

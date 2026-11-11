@@ -6,3 +6,8 @@
   margin: 0 0 var(--space-3);
   font-size: 1.375rem;
 }
+
+/* A heading is not something you press, so when the focus is moved to it there is no ring. */
+.projects-page__list-heading:focus {
+  outline: none;
+}
