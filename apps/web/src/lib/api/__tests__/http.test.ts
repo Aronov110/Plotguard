@@ -61,6 +61,34 @@ describe("apiRequest", () => {
     expect(calls[0]?.headers.get("content-type")).toBeNull();
   });
 
+  it("sends a PATCH with a JSON body", async () => {
+    const calls = spy("/thing/1");
+    await apiRequest("/thing/1", { method: "PATCH", json: { title: "New" } });
+    expect(calls[0]?.method).toBe("PATCH");
+    expect(calls[0]?.headers.get("content-type")).toBe("application/json");
+    expect(JSON.parse(calls[0]?.body ?? "")).toEqual({ title: "New" });
+  });
+
+  it("sends a DELETE with no body and no content type, and accepts an answer with no body", async () => {
+    const calls = spy("/thing/1", () => new HttpResponse(null, { status: 204 }));
+    const response = await apiRequest("/thing/1", { method: "DELETE" });
+    expect(response.status).toBe(204);
+    expect(calls[0]?.method).toBe("DELETE");
+    expect(calls[0]?.body).toBe("");
+    expect(calls[0]?.headers.get("content-type")).toBeNull();
+  });
+
+  it("sends the access token with a PATCH and a DELETE too", async () => {
+    setAccessToken("tok-9");
+    const calls = spy("/thing/1", () => new HttpResponse(null, { status: 204 }));
+    await apiRequest("/thing/1", { method: "PATCH", auth: true, json: { a: 1 } });
+    await apiRequest("/thing/1", { method: "DELETE", auth: true });
+    expect(calls.map((call) => call.headers.get("authorization"))).toEqual([
+      "Bearer tok-9",
+      "Bearer tok-9",
+    ]);
+  });
+
   it("sends strings in the body untouched, with no trimming", async () => {
     const calls = spy("/thing");
     const password = "  päss wörd 🔑 with spaces  ";

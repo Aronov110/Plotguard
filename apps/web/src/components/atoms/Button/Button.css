@@ -23,6 +23,12 @@
   color: var(--color-accent);
 }
 
+.button--danger {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+}
+
 .button:hover:not(:disabled, [aria-disabled="true"]) {
   text-decoration: underline;
 }

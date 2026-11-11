@@ -1,0 +1,15 @@
+.project-summary__title {
+  margin: 0 0 var(--space-1);
+  font-size: 1.125rem;
+}
+
+.project-summary__meta {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.project-summary__logline {
+  margin: var(--space-2) 0 0;
+  /* Keeps the author's own line breaks. */
+  white-space: pre-line;
+}

@@ -8,23 +8,7 @@
   overflow-wrap: anywhere;
 }
 
-/* The item gets the focus from code after "Load more"; it is not something to press, so no ring. */
+/* The card gets the focus from code after "Load more" or a delete; it is not something to press, so no ring. */
 .project-item:focus {
   outline: none;
-}
-
-.project-item__title {
-  margin: 0 0 var(--space-1);
-  font-size: 1.125rem;
-}
-
-.project-item__meta {
-  margin: 0;
-  color: var(--color-text-muted);
-}
-
-.project-item__logline {
-  margin: var(--space-2) 0 0;
-  /* Keeps the author's own line breaks. */
-  white-space: pre-line;
 }

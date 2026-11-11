@@ -83,9 +83,16 @@ Open **http://127.0.0.1:5173** (not `localhost`, see below). The screens:
 | `/app`                | Your projects: a form for a new one, and a list | signed-in; others go to `/login` |
 | anything else         | Page not found                                  | everyone                         |
 
-The projects list loads 20 at a time with a "Load more projects" button. A new project is added to
-the top at once. What a person wrote (titles, loglines) is always shown as text, never as markup.
-Editing and deleting a project, and opening one to write, come in later steps.
+The projects list loads 20 at a time with a "Load more projects" button. A new or changed project
+is shown at the top at once (the list is sorted by last change). What a person wrote (titles,
+loglines) is always shown as text, never as markup.
+
+Each project has **Edit** and **Delete**. Edit turns the card into a form with the project's values;
+Save sends only what changed, and saving with no change asks the API for nothing. Delete asks first,
+naming the project and saying that its documents and analyses go too and that it cannot be undone;
+the question opens with the focus on "Keep project", and Escape keeps the project. The projects API
+has no version check, so if two tabs change the same project the last save wins. Opening a project to
+write comes in a later step.
 
 After a login the person returns to the private page that sent them to the login. That address is
 checked by resolving it (`lib/navigation/safe-return-path.ts`), so `//evil.example`, `/\evil.example`

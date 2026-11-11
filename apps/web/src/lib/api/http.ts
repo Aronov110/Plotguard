@@ -4,7 +4,7 @@ import { getAccessToken } from "../auth/token-store.ts";
 import { NetworkError, ResponseShapeError, readProblem } from "./problem.ts";
 
 export interface RequestOptions {
-  readonly method?: "GET" | "POST";
+  readonly method?: "GET" | "POST" | "PATCH" | "DELETE";
   /** Sent as the JSON body. Leave it out for no body and no content type at all. */
   readonly json?: unknown;
   /** Send `Authorization: Bearer <access token>` when a token exists. */

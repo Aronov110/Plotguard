@@ -1,9 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { AuthProvider } from "../../../../lib/auth/session.tsx";
 import type { ProjectsView } from "../../../../lib/projects/use-projects.ts";
 import { expectNoA11yViolations } from "../../../../test-support/a11y.ts";
-import { makeProject } from "../../../../test-support/projects-handlers.ts";
+import { answerDeleteProject, makeProject } from "../../../../test-support/projects-handlers.ts";
 import { projectItemId } from "../../../molecules/ProjectListItem/ProjectListItem.tsx";
 import { ProjectList } from "../ProjectList.tsx";
 
@@ -17,21 +18,43 @@ function readyView(
     loadingMore: false,
     moreError: undefined,
     justLoaded: undefined,
+    announcement: undefined,
     ...overrides,
   };
 }
 
+const HEADING_ID = "list-heading";
+
 function renderList(view: ProjectsView) {
   const onRetry = vi.fn();
   const onLoadMore = vi.fn();
+  const onSaved = vi.fn();
+  const onUnchanged = vi.fn();
+  const onDeleted = vi.fn();
   const element = (next: ProjectsView) => (
-    <ProjectList view={next} onRetry={onRetry} onLoadMore={onLoadMore} />
+    <AuthProvider>
+      <h2 id={HEADING_ID} tabIndex={-1}>
+        All your projects
+      </h2>
+      <ProjectList
+        view={next}
+        onRetry={onRetry}
+        onLoadMore={onLoadMore}
+        headingId={HEADING_ID}
+        onSaved={onSaved}
+        onUnchanged={onUnchanged}
+        onDeleted={onDeleted}
+      />
+    </AuthProvider>
   );
   const result = render(element(view));
   return {
     ...result,
     onRetry,
     onLoadMore,
+    onSaved,
+    onUnchanged,
+    onDeleted,
     user: userEvent.setup(),
     show: (next: ProjectsView) => {
       result.rerender(element(next));
@@ -234,5 +257,118 @@ describe("ProjectList: accessibility", () => {
   ])("has no violations when %s", async (_name, view) => {
     const { container } = renderList(view);
     await expectNoA11yViolations(container);
+  });
+});
+
+describe("ProjectList: changing and deleting", () => {
+  const [a, b, c] = [
+    makeProject({ title: "Alpha" }),
+    makeProject({ title: "Beta" }),
+    makeProject({ title: "Gamma" }),
+  ];
+
+  it("gives every project an Edit and a Delete button, named after the project", () => {
+    renderList(readyView({ items: [a, b] }));
+    expect(screen.getByRole("button", { name: "Edit project “Alpha”" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Delete project “Alpha”" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit project “Beta”" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Delete project “Beta”" })).toBeVisible();
+  });
+
+  it("tells the page which project was saved, and when nothing was different", async () => {
+    const { user, onSaved, onUnchanged } = renderList(readyView({ items: [a] }));
+    await user.click(screen.getByRole("button", { name: "Edit project “Alpha”" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(onUnchanged).toHaveBeenCalledTimes(1));
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  describe("after a delete", () => {
+    async function deleteOne(
+      user: ReturnType<typeof userEvent.setup>,
+      title: string,
+      onDeleted: ReturnType<typeof vi.fn>,
+    ) {
+      await user.click(screen.getByRole("button", { name: `Delete project “${title}”` }));
+      await user.click(screen.getByRole("button", { name: "Delete project" }));
+      await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
+    }
+
+    it("tells the page which project is gone", async () => {
+      answerDeleteProject();
+      const { user, onDeleted } = renderList(readyView({ items: [a, b, c] }));
+      await deleteOne(user, "Beta", onDeleted);
+      expect(onDeleted.mock.calls[0]?.[0]).toMatchObject({ id: b.id, title: "Beta" });
+    });
+
+    it("moves the focus to the next project", async () => {
+      answerDeleteProject();
+      const { user, onDeleted, show } = renderList(readyView({ items: [a, b, c] }));
+      await deleteOne(user, "Beta", onDeleted);
+
+      show(readyView({ items: [a, c] }));
+      expect(document.getElementById(projectItemId(c.id))).toHaveFocus();
+    });
+
+    it("moves the focus to the previous project when the last one was deleted", async () => {
+      answerDeleteProject();
+      const { user, onDeleted, show } = renderList(readyView({ items: [a, b, c] }));
+      await deleteOne(user, "Gamma", onDeleted);
+
+      show(readyView({ items: [a, b] }));
+      expect(document.getElementById(projectItemId(b.id))).toHaveFocus();
+    });
+
+    it("moves the focus to the heading when the only project was deleted", async () => {
+      answerDeleteProject();
+      const { user, onDeleted, show } = renderList(readyView({ items: [a] }));
+      await deleteOne(user, "Alpha", onDeleted);
+
+      show(readyView({ items: [] }));
+      expect(document.getElementById(HEADING_ID)).toHaveFocus();
+      expect(screen.getByText(/You have no projects yet/)).toBeVisible();
+    });
+
+    it("does not move the focus when nothing was deleted", () => {
+      const { show } = renderList(readyView({ items: [a, b] }));
+      show(readyView({ items: [b, a] }));
+      expect(document.body).toHaveFocus();
+    });
+  });
+
+  describe("what is announced after a change", () => {
+    it("says what happened, politely", () => {
+      renderList(
+        readyView({ items: [a], announcement: { text: "Project “Alpha” saved.", serial: 1 } }),
+      );
+      expect(screen.getByRole("status")).toHaveTextContent("Project “Alpha” saved.");
+    });
+
+    it("changes the text when the same words come twice in a row, so they are said again", () => {
+      const { show } = renderList(
+        readyView({ items: [a], announcement: { text: "No changes to save.", serial: 1 } }),
+      );
+      const first = screen.getByRole("status").textContent;
+      show(readyView({ items: [a], announcement: { text: "No changes to save.", serial: 2 } }));
+      const second = screen.getByRole("status").textContent;
+      expect(second).not.toBe(first);
+      expect(second?.trim()).toBe(first?.trim());
+    });
+
+    it("says an announcement instead of the count of a page that was loaded earlier", () => {
+      renderList(
+        readyView({
+          items: [a, b],
+          justLoaded: { firstId: b.id, count: 1, serial: 1 },
+          announcement: { text: "Project “Alpha” deleted.", serial: 2 },
+        }),
+      );
+      expect(screen.getByRole("status")).toHaveTextContent("Project “Alpha” deleted.");
+    });
+
+    it("says nothing when there is nothing to say", () => {
+      renderList(readyView({ items: [a] }));
+      expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    });
   });
 });

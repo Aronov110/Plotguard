@@ -97,3 +97,60 @@ export function created(overrides: Partial<Project> = {}): (body: unknown) => Re
     );
   };
 }
+
+export interface ChangeCall {
+  /** The id in the address. */
+  readonly id: string;
+  /** The body of a `PATCH`; `undefined` for a `DELETE`. */
+  readonly body: unknown;
+  readonly headers: Headers;
+}
+
+/** Answers `PATCH /projects/:id` and records what was sent. */
+export function answerUpdateProject(
+  reply: (id: string, body: unknown) => Response | Promise<Response>,
+): ChangeCall[] {
+  const calls: ChangeCall[] = [];
+  server.use(
+    http.patch("/projects/:id", async ({ request, params }) => {
+      const id = String(params.id);
+      const body: unknown = await request.json();
+      calls.push({ id, body, headers: request.headers });
+      return reply(id, body);
+    }),
+  );
+  return calls;
+}
+
+/** Answers `DELETE /projects/:id` and records the ids. */
+export function answerDeleteProject(
+  reply: (id: string) => Response | Promise<Response> = () =>
+    new HttpResponse(null, { status: 204 }),
+): ChangeCall[] {
+  const calls: ChangeCall[] = [];
+  server.use(
+    http.delete("/projects/:id", ({ request, params }) => {
+      const id = String(params.id);
+      calls.push({ id, body: undefined, headers: request.headers });
+      return reply(id);
+    }),
+  );
+  return calls;
+}
+
+/**
+ * The usual success answer of `PATCH /projects/:id`: 200 with `project` changed as the body says
+ * (and a newer `updatedAt`, as the API does).
+ */
+export function updated(project: Project): (id: string, body: unknown) => Response {
+  return (_id, body) => {
+    const sent = body as { title?: string; format?: Project["format"]; logline?: string | null };
+    return HttpResponse.json({
+      ...project,
+      ...(sent.title === undefined ? {} : { title: sent.title.trim() }),
+      ...(sent.format === undefined ? {} : { format: sent.format }),
+      ...(sent.logline === undefined ? {} : { logline: sent.logline }),
+      updatedAt: "2026-11-11T09:00:00.000Z",
+    });
+  };
+}

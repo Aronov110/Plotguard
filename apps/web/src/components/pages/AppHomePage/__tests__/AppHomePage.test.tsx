@@ -1,13 +1,16 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { expectNoPageA11yViolations } from "../../../../test-support/a11y.ts";
 import {
   answerCreateProject,
+  answerDeleteProject,
   answerProjectList,
+  answerUpdateProject,
   created,
   makeProject,
   problemResponse,
   projectPage,
+  updated,
 } from "../../../../test-support/projects-handlers.ts";
 import { renderApp } from "../../../../test-support/render-app.tsx";
 import { projectItemId } from "../../../molecules/ProjectListItem/ProjectListItem.tsx";
@@ -24,6 +27,13 @@ async function openHome(options: Parameters<typeof renderApp>[0] = {}) {
 // one inside a problem box, so the list of projects is not looked up by its role.)
 const titlesShown = () =>
   screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+
+/**
+ * The open form of one project. The page also holds the new-project form, which has a "Title" of
+ * its own, so the fields of an edit form are looked up inside it.
+ */
+const editForm = (title: string) =>
+  within(screen.getByRole("form", { name: `Edit project “${title}”` }));
 
 describe("AppHomePage: the frame", () => {
   it("is titled Your projects, in the page and in the tab", async () => {
@@ -232,6 +242,200 @@ describe("AppHomePage: creating a project", () => {
     );
     expect(screen.getByLabelText("Title")).toHaveValue("Too fast");
     expect(screen.getByText(/You have no projects yet/)).toBeVisible();
+  });
+});
+
+describe("AppHomePage: changing a project", () => {
+  const [a, b, c] = [
+    makeProject({ title: "Alpha", format: "prose", logline: "First logline." }),
+    makeProject({ title: "Beta" }),
+    makeProject({ title: "Gamma" }),
+  ];
+
+  it("saves a change: the project moves to the top as it is now, and the change is announced", async () => {
+    answerProjectList(projectPage([a, b, c]));
+    const calls = answerUpdateProject(updated(c));
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Gamma" });
+
+    await user.click(screen.getByRole("button", { name: "Edit project “Gamma”" }));
+    const title = editForm("Gamma").getByLabelText("Title");
+    expect(title).toHaveFocus();
+    await user.clear(title);
+    await user.type(title, "Gamma, revised");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("heading", { level: 3, name: "Gamma, revised" })).toBeVisible();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.id).toBe(c.id);
+    expect(calls[0]?.body).toEqual({ title: "Gamma, revised" });
+    expect(titlesShown()).toEqual(["Gamma, revised", "Alpha", "Beta"]);
+    expect(screen.getByText("Project “Gamma, revised” saved.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit project “Gamma, revised”" })).toHaveFocus();
+  });
+
+  it("does not ask the API for anything when nothing was changed, and says so", async () => {
+    answerProjectList(projectPage([a, b]));
+    const calls = answerUpdateProject(updated(a));
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Alpha" });
+
+    await user.click(screen.getByRole("button", { name: "Edit project “Alpha”" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("No changes to save.")).toBeInTheDocument();
+    expect(calls).toHaveLength(0);
+    expect(titlesShown()).toEqual(["Alpha", "Beta"]);
+    expect(screen.getByRole("button", { name: "Edit project “Alpha”" })).toHaveFocus();
+  });
+
+  it("keeps the other projects' open forms and typed text when one is saved", async () => {
+    answerProjectList(projectPage([a, b]));
+    answerUpdateProject(updated(b));
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Beta" });
+
+    await user.click(screen.getByRole("button", { name: "Edit project “Alpha”" }));
+    await user.type(editForm("Alpha").getByLabelText("Title"), " (draft)");
+    await user.click(screen.getByRole("button", { name: "Edit project “Beta”" }));
+    expect(screen.getAllByRole("form", { name: /^Edit project/ })).toHaveLength(2);
+    await user.type(editForm("Beta").getByLabelText("Title"), "!");
+    await user.click(editForm("Beta").getByRole("button", { name: "Save changes" }));
+
+    await screen.findByRole("heading", { level: 3, name: "Beta!" });
+    // Beta moved to the top; Alpha's form is still open with what was typed.
+    expect(editForm("Alpha").getByLabelText("Title")).toHaveValue("Alpha (draft)");
+  });
+
+  it("says why a change could not be saved, and keeps the form and the text", async () => {
+    answerProjectList(projectPage([a]));
+    answerUpdateProject(() => problemResponse(429, "rate-limited", {}, { "retry-after": "20" }));
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Alpha" });
+
+    await user.click(screen.getByRole("button", { name: "Edit project “Alpha”" }));
+    await user.type(editForm("Alpha").getByLabelText("Title"), "!");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Too many requests. Try again in 20 seconds.",
+    );
+    expect(editForm("Alpha").getByLabelText("Title")).toHaveValue("Alpha!");
+  });
+
+  it("shows a changed project in the same place after a reload (the list is sorted by last change)", async () => {
+    answerProjectList(projectPage([a, b]));
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Alpha" });
+    answerUpdateProject(updated(b));
+    await user.click(screen.getByRole("button", { name: "Edit project “Beta”" }));
+    await user.type(editForm("Beta").getByLabelText("Title"), "!");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await screen.findByRole("heading", { level: 3, name: "Beta!" });
+    expect(titlesShown()[0]).toBe("Beta!");
+  });
+});
+
+describe("AppHomePage: deleting a project", () => {
+  const [a, b, c] = [
+    makeProject({ title: "Alpha" }),
+    makeProject({ title: "Beta" }),
+    makeProject({ title: "Gamma" }),
+  ];
+
+  async function confirmDelete(user: Awaited<ReturnType<typeof openHome>>["user"], title: string) {
+    await user.click(screen.getByRole("button", { name: `Delete project “${title}”` }));
+    await user.click(screen.getByRole("button", { name: "Delete project" }));
+  }
+
+  it("deletes after the question, takes the project out, announces it and moves the focus to the next one", async () => {
+    answerProjectList(projectPage([a, b, c]));
+    const calls = answerDeleteProject();
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Beta" });
+
+    await confirmDelete(user, "Beta");
+
+    await waitFor(() => expect(titlesShown()).toEqual(["Alpha", "Gamma"]));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.id).toBe(b.id);
+    expect(screen.getByText("Project “Beta” deleted.")).toBeInTheDocument();
+    expect(document.getElementById(projectItemId(c.id))).toHaveFocus();
+  });
+
+  it("moves the focus to the previous project when the last one is deleted", async () => {
+    answerProjectList(projectPage([a, b]));
+    answerDeleteProject();
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Beta" });
+
+    await confirmDelete(user, "Beta");
+
+    await waitFor(() => expect(titlesShown()).toEqual(["Alpha"]));
+    expect(document.getElementById(projectItemId(a.id))).toHaveFocus();
+  });
+
+  it("shows the empty message and moves the focus to the list's heading when the only project is deleted", async () => {
+    answerProjectList(projectPage([a]));
+    answerDeleteProject();
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Alpha" });
+
+    await confirmDelete(user, "Alpha");
+
+    expect(await screen.findByText(/You have no projects yet/)).toBeVisible();
+    expect(screen.getByRole("heading", { level: 2, name: "All your projects" })).toHaveFocus();
+  });
+
+  it("deletes nothing when the person keeps the project", async () => {
+    answerProjectList(projectPage([a, b]));
+    const calls = answerDeleteProject();
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Alpha" });
+
+    await user.click(screen.getByRole("button", { name: "Delete project “Alpha”" }));
+    await user.click(screen.getByRole("button", { name: "Keep project" }));
+
+    expect(titlesShown()).toEqual(["Alpha", "Beta"]);
+    expect(calls).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Delete project “Alpha”" })).toHaveFocus();
+  });
+
+  it("takes a project out even when it was already deleted somewhere else (a 404)", async () => {
+    answerProjectList(projectPage([a, b]));
+    answerDeleteProject(() => problemResponse(404, "not-found"));
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Alpha" });
+
+    await confirmDelete(user, "Alpha");
+    await waitFor(() => expect(titlesShown()).toEqual(["Beta"]));
+  });
+
+  it("keeps the project and says why when the delete fails", async () => {
+    answerProjectList(projectPage([a, b]));
+    answerDeleteProject(() => problemResponse(503, "service-unavailable"));
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Alpha" });
+
+    await confirmDelete(user, "Alpha");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The service is busy.");
+    expect(titlesShown()).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("lets the person load more projects after one was deleted, from the same place", async () => {
+    const calls = answerProjectList(projectPage([a, b], "cursor-2"), projectPage([c], null));
+    answerDeleteProject();
+    const { user } = await openHome();
+    await screen.findByRole("heading", { level: 3, name: "Alpha" });
+
+    await confirmDelete(user, "Alpha");
+    await waitFor(() => expect(titlesShown()).toEqual(["Beta"]));
+    await user.click(screen.getByRole("button", { name: "Load more projects" }));
+
+    await screen.findByRole("heading", { level: 3, name: "Gamma" });
+    expect(calls[1]?.url.searchParams.get("cursor")).toBe("cursor-2");
+    expect(titlesShown()).toEqual(["Beta", "Gamma"]);
   });
 });
 
