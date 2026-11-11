@@ -100,9 +100,12 @@ test.describe("the login cookies", () => {
     await signUp(page, uniqueUser());
     await signOut(page);
 
-    const names = (await context.cookies()).map((cookie) => cookie.name);
-    expect(names).not.toContain("refresh_token");
-    expect(names).not.toContain("csrf_token");
+    // The page shows the login screen at once, but the browser deletes the cookies only when the
+    // server's sign-out answer arrives, a moment later. So wait for them to go (up to the polling
+    // timeout) instead of reading them in that gap; if they never go, this still fails.
+    const cookieNames = async () => (await context.cookies()).map((cookie) => cookie.name);
+    await expect.poll(cookieNames).not.toContain("refresh_token");
+    await expect.poll(cookieNames).not.toContain("csrf_token");
   });
 });
 
