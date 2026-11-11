@@ -1,0 +1,10 @@
+.project-form {
+  max-width: 40rem;
+}
+
+.project-form__status {
+  min-height: 1.5em;
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}

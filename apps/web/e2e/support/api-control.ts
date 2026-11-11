@@ -33,3 +33,39 @@ export async function createAccount(request: APIRequestContext, user: TestUser):
     throw new Error(`Could not create the test account (status ${response.status()}).`);
   }
 }
+
+/**
+ * Creates projects for an existing account straight through the API, oldest first (so the last
+ * title is the newest and tops the list). A test about a long list then does not have to fill in the
+ * form many times. It logs in to get an access token; the login cookies stay in `request`, not in
+ * the browser.
+ */
+export async function createProjects(
+  request: APIRequestContext,
+  user: TestUser,
+  projects: readonly { readonly title: string; readonly logline?: string }[],
+): Promise<void> {
+  const login = await request.post(`${API_ORIGIN}/auth/login`, {
+    headers: { Origin: WEB_ORIGIN },
+    data: { email: user.email, password: user.password },
+  });
+  if (login.status() !== 200) {
+    throw new Error(`Could not log in the test account (status ${login.status()}).`);
+  }
+  const body: unknown = await login.json();
+  const token =
+    typeof body === "object" && body !== null && "accessToken" in body
+      ? body.accessToken
+      : undefined;
+  if (typeof token !== "string") throw new Error("The login answer had no access token.");
+
+  for (const project of projects) {
+    const response = await request.post(`${API_ORIGIN}/projects`, {
+      headers: { Origin: WEB_ORIGIN, Authorization: `Bearer ${token}` },
+      data: { format: "screenplay", ...project },
+    });
+    if (response.status() !== 201) {
+      throw new Error(`Could not create a test project (status ${response.status()}).`);
+    }
+  }
+}

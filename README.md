@@ -76,12 +76,16 @@ cannot plant its own login cookies in a visitor's browser. Development uses the 
 
 Open **http://127.0.0.1:5173** (not `localhost`, see below). The screens:
 
-| Address               | Screen                                | Who sees it                      |
-| --------------------- | ------------------------------------- | -------------------------------- |
-| `/`                   | Landing page                          | everyone                         |
-| `/register`, `/login` | Sign-up and login forms               | signed-out; others are sent on   |
-| `/app`                | Your projects (a placeholder for now) | signed-in; others go to `/login` |
-| anything else         | Page not found                        | everyone                         |
+| Address               | Screen                                          | Who sees it                      |
+| --------------------- | ----------------------------------------------- | -------------------------------- |
+| `/`                   | Landing page                                    | everyone                         |
+| `/register`, `/login` | Sign-up and login forms                         | signed-out; others are sent on   |
+| `/app`                | Your projects: a form for a new one, and a list | signed-in; others go to `/login` |
+| anything else         | Page not found                                  | everyone                         |
+
+The projects list loads 20 at a time with a "Load more projects" button. A new project is added to
+the top at once. What a person wrote (titles, loglines) is always shown as text, never as markup.
+Editing and deleting a project, and opening one to write, come in later steps.
 
 After a login the person returns to the private page that sent them to the login. That address is
 checked by resolving it (`lib/navigation/safe-return-path.ts`), so `//evil.example`, `/\evil.example`
