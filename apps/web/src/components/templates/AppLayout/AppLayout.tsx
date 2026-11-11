@@ -10,7 +10,14 @@ import "./AppLayout.css";
  * and a sign-out button, and the page below it. The header is skipped by the first link on the
  * screen, so a keyboard user does not have to pass it on every page.
  */
-export function AppLayout({ children }: { readonly children: ReactNode }): ReactElement {
+export function AppLayout({
+  children,
+  wide = false,
+}: {
+  readonly children: ReactNode;
+  /** A wider main area, for a screen with two panes side by side (the writing screen). */
+  readonly wide?: boolean;
+}): ReactElement {
   const { state, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const name =
@@ -45,7 +52,11 @@ export function AppLayout({ children }: { readonly children: ReactNode }): React
           </Button>
         </div>
       </header>
-      <main id="main-content" className="app-layout__main" tabIndex={-1}>
+      <main
+        id="main-content"
+        className={wide ? "app-layout__main app-layout__main--wide" : "app-layout__main"}
+        tabIndex={-1}
+      >
         {children}
       </main>
     </>

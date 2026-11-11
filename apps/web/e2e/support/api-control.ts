@@ -69,3 +69,93 @@ export async function createProjects(
     }
   }
 }
+
+/** One outline item to seed: a scene names the act it goes into by that act's title. */
+export interface SeedDocument {
+  readonly title: string;
+  /** The title of the act or chapter this scene goes into. Leave it out for the top level. */
+  readonly inside?: string;
+  readonly content?: string;
+}
+
+/**
+ * Creates one project with an outline straight through the API, so a test about writing does not
+ * have to click through the form first. The items are created in the order given (acts before their
+ * scenes). Returns the project's id and the id of each item by its title.
+ */
+export async function createProjectWithDocuments(
+  request: APIRequestContext,
+  user: TestUser,
+  project: { readonly title: string; readonly documents: readonly SeedDocument[] },
+): Promise<{ readonly projectId: string; readonly ids: Readonly<Record<string, string>> }> {
+  const login = await request.post(`${API_ORIGIN}/auth/login`, {
+    headers: { Origin: WEB_ORIGIN },
+    data: { email: user.email, password: user.password },
+  });
+  if (login.status() !== 200) {
+    throw new Error(`Could not log in the test account (status ${login.status()}).`);
+  }
+  const body: unknown = await login.json();
+  const token =
+    typeof body === "object" && body !== null && "accessToken" in body
+      ? body.accessToken
+      : undefined;
+  if (typeof token !== "string") throw new Error("The login answer had no access token.");
+  const headers = { Origin: WEB_ORIGIN, Authorization: `Bearer ${token}` };
+
+  const created = await request.post(`${API_ORIGIN}/projects`, {
+    headers,
+    data: { title: project.title, format: "screenplay" },
+  });
+  if (created.status() !== 201) {
+    throw new Error(`Could not create a test project (status ${created.status()}).`);
+  }
+  const projectId = ((await created.json()) as { id: string }).id;
+
+  const ids: Record<string, string> = {};
+  for (const document of project.documents) {
+    const parentId = document.inside === undefined ? undefined : ids[document.inside];
+    const response = await request.post(`${API_ORIGIN}/projects/${projectId}/documents`, {
+      headers,
+      data: {
+        title: document.title,
+        ...(parentId === undefined ? {} : { parentId }),
+        ...(document.content === undefined ? {} : { content: document.content }),
+      },
+    });
+    if (response.status() !== 201) {
+      throw new Error(`Could not create a test document (status ${response.status()}).`);
+    }
+    ids[document.title] = ((await response.json()) as { id: string }).id;
+  }
+  return { projectId, ids };
+}
+
+/** Deletes one document straight through the API, as another device of the same person could. */
+export async function deleteDocument(
+  request: APIRequestContext,
+  user: TestUser,
+  projectId: string,
+  documentId: string,
+): Promise<void> {
+  const login = await request.post(`${API_ORIGIN}/auth/login`, {
+    headers: { Origin: WEB_ORIGIN },
+    data: { email: user.email, password: user.password },
+  });
+  if (login.status() !== 200) {
+    throw new Error(`Could not log in the test account (status ${login.status()}).`);
+  }
+  const body: unknown = await login.json();
+  const token =
+    typeof body === "object" && body !== null && "accessToken" in body
+      ? body.accessToken
+      : undefined;
+  if (typeof token !== "string") throw new Error("The login answer had no access token.");
+  const response = await request.delete(
+    `${API_ORIGIN}/projects/${projectId}/documents/${documentId}`,
+    { headers: { Origin: WEB_ORIGIN, Authorization: `Bearer ${token}` } },
+  );
+  if (response.status() !== 204) {
+    throw new Error(`Could not delete a test document (status ${response.status()}).`);
+  }
+}

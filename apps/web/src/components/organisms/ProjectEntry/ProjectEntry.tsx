@@ -10,6 +10,11 @@ import "./ProjectEntry.css";
 
 type Mode = "viewing" | "editing" | "confirming-delete";
 
+/** The address of a project's writing screen. */
+function writingPath(projectId: string): string {
+  return `/app/projects/${encodeURIComponent(projectId)}`;
+}
+
 export interface ProjectEntryProps {
   readonly project: Project;
   /** Called with the project as saved. The list shows it at the top. */
@@ -80,7 +85,7 @@ export function ProjectEntry({
 
   return (
     <ProjectListItem projectId={project.id}>
-      <ProjectSummary project={project} />
+      <ProjectSummary project={project} to={writingPath(project.id)} />
       {mode === "confirming-delete" ? (
         <DeleteConfirmation
           projectTitle={project.title}

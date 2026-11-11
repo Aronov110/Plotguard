@@ -81,6 +81,7 @@ Open **http://127.0.0.1:5173** (not `localhost`, see below). The screens:
 | `/`                   | Landing page                                    | everyone                         |
 | `/register`, `/login` | Sign-up and login forms                         | signed-out; others are sent on   |
 | `/app`                | Your projects: a form for a new one, and a list | signed-in; others go to `/login` |
+| `/app/projects/:id`   | The writing screen of one project               | signed-in; others go to `/login` |
 | anything else         | Page not found                                  | everyone                         |
 
 The projects list loads 20 at a time with a "Load more projects" button. A new or changed project
@@ -91,8 +92,32 @@ Each project has **Edit** and **Delete**. Edit turns the card into a form with t
 Save sends only what changed, and saving with no change asks the API for nothing. Delete asks first,
 naming the project and saying that its documents and analyses go too and that it cannot be undone;
 the question opens with the focus on "Keep project", and Escape keeps the project. The projects API
-has no version check, so if two tabs change the same project the last save wins. Opening a project to
-write comes in a later step.
+has no version check, so if two tabs change the same project the last save wins. A project's title
+opens its writing screen.
+
+### The writing screen
+
+`/app/projects/<project id>?document=<document id>`: the project's outline (acts, chapters and the
+scenes inside them) beside the text of the open item. The open item is in the query string, so Back
+works and a link leads straight to a scene; choosing or adding an item moves the focus into its text.
+"Add to the outline" adds an act or chapter at the top level, or a scene inside the open act (one
+level of nesting). Renaming, moving and deleting items come in a later step.
+
+- **The text is a plain box**, kept exactly as typed (spaces, line breaks, emoji, any language). The
+  box itself holds the text, not React, so a very long text (up to 200,000 characters) does not
+  re-render on every key.
+- **It saves by itself** 2 seconds after the last keystroke, when the box or the document is left,
+  and at once with Ctrl or Cmd + S. The status line says "Saved", "Unsaved changes" or "Saving…". Text
+  typed through an input method (Chinese, Japanese, Korean) is saved after the character is finished.
+- **A failed save is retried** after 5, 10, 20, 40 and then every 60 seconds (or as long as the
+  server says after "too many requests"); the text stays in the box and the status line says why.
+  Text the API refuses (such as one with a broken character) is explained and kept.
+- **Each save says which version it started from** (`If-Match`). If another tab or device saved a
+  newer version first (412), nothing is overwritten: the writer's text stays on screen and a notice
+  offers "Save my text over theirs" or "Load the newer text (discard mine)".
+- **Closing the tab with unsaved text asks first.** A tab closed within two seconds of the last
+  keystroke, without that prompt being answered, can still lose those last words (a closing page
+  cannot send a request that large).
 
 After a login the person returns to the private page that sent them to the login. That address is
 checked by resolving it (`lib/navigation/safe-return-path.ts`), so `//evil.example`, `/\evil.example`

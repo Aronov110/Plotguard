@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse } from "msw";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../../../../lib/auth/session.tsx";
 import { expectNoA11yViolations } from "../../../../test-support/a11y.ts";
@@ -27,16 +28,18 @@ async function renderEntry(project = PROJECT) {
   const onUnchanged = vi.fn();
   const onDeleted = vi.fn();
   const view = render(
-    <AuthProvider manager={context.manager}>
-      <ul>
-        <ProjectEntry
-          project={project}
-          onSaved={onSaved}
-          onUnchanged={onUnchanged}
-          onDeleted={onDeleted}
-        />
-      </ul>
-    </AuthProvider>,
+    <MemoryRouter>
+      <AuthProvider manager={context.manager}>
+        <ul>
+          <ProjectEntry
+            project={project}
+            onSaved={onSaved}
+            onUnchanged={onUnchanged}
+            onDeleted={onDeleted}
+          />
+        </ul>
+      </AuthProvider>
+    </MemoryRouter>,
   );
   return { ...view, onSaved, onUnchanged, onDeleted, user: userEvent.setup() };
 }
@@ -277,22 +280,24 @@ describe("ProjectEntry: several projects", () => {
     const second = makeProject({ title: "Second" });
     const user = userEvent.setup();
     render(
-      <AuthProvider manager={context.manager}>
-        <ul>
-          <ProjectEntry
-            project={first}
-            onSaved={vi.fn()}
-            onUnchanged={vi.fn()}
-            onDeleted={vi.fn()}
-          />
-          <ProjectEntry
-            project={second}
-            onSaved={vi.fn()}
-            onUnchanged={vi.fn()}
-            onDeleted={vi.fn()}
-          />
-        </ul>
-      </AuthProvider>,
+      <MemoryRouter>
+        <AuthProvider manager={context.manager}>
+          <ul>
+            <ProjectEntry
+              project={first}
+              onSaved={vi.fn()}
+              onUnchanged={vi.fn()}
+              onDeleted={vi.fn()}
+            />
+            <ProjectEntry
+              project={second}
+              onSaved={vi.fn()}
+              onUnchanged={vi.fn()}
+              onDeleted={vi.fn()}
+            />
+          </ul>
+        </AuthProvider>
+      </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("button", { name: "Edit project “First”" }));

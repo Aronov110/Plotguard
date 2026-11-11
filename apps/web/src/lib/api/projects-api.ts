@@ -62,6 +62,8 @@ export interface ProjectsApi {
   /** One page of the signed-in person's projects, newest change first. */
   list(options?: ListProjectsOptions): Promise<ProjectPage>;
   create(input: CreateProjectInput, options?: CreateProjectOptions): Promise<Project>;
+  /** One project. Throws an `ApiError` with status 404 if it does not exist or is not the person's. */
+  get(id: string, options?: ProjectCallOptions): Promise<Project>;
   /** Changes some fields of one project. Returns the project as it is now. */
   update(id: string, changes: UpdateProjectInput, options?: ProjectCallOptions): Promise<Project>;
   /** Deletes one project for good, with its documents and analyses. */
@@ -91,6 +93,12 @@ export const projectsApi: ProjectsApi = {
       method: "POST",
       auth: true,
       json: { title, format, ...(logline === undefined ? {} : { logline }) },
+      ...(signal === undefined ? {} : { signal }),
+    }),
+
+  get: (id, { signal } = {}) =>
+    apiJson(projectPath(id), projectSchema, {
+      auth: true,
       ...(signal === undefined ? {} : { signal }),
     }),
 

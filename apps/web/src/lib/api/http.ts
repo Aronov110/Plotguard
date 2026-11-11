@@ -11,6 +11,11 @@ export interface RequestOptions {
   readonly auth?: boolean;
   /** Copy the CSRF cookie into the `X-CSRF-Token` header when the cookie exists. */
   readonly csrf?: boolean;
+  /**
+   * The version the caller read, sent as `If-Match: "<version>"`. The API then saves only if the
+   * thing is still at that version, and answers 412 if somebody saved first.
+   */
+  readonly ifMatch?: number;
   /** Cancels the request. The call then fails with an `AbortError`. */
   readonly signal?: AbortSignal;
   /**
@@ -67,6 +72,7 @@ export async function apiRequest(path: string, options: RequestOptions = {}): Pr
     const code = readCsrfToken();
     if (code !== undefined) headers.set("X-CSRF-Token", code);
   }
+  if (options.ifMatch !== undefined) headers.set("If-Match", `"${options.ifMatch}"`);
 
   // One controller carries both the caller's wish to cancel and the timeout. It is built by hand
   // instead of with `AbortSignal.timeout` and `AbortSignal.any`, which older Safari versions lack.
