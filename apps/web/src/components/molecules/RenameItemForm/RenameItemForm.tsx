@@ -1,7 +1,7 @@
 import {
-  type FormEvent,
   type KeyboardEvent,
   type ReactElement,
+  type SubmitEvent as ReactSubmitEvent,
   useEffect,
   useId,
   useRef,
@@ -53,7 +53,7 @@ export function RenameItemForm({
     if (problem !== undefined) summaryRef.current?.focus();
   }, [problem]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
+  const handleSubmit = (event: ReactSubmitEvent<HTMLFormElement>): void => {
     event.preventDefault();
     onSave(readText(new FormData(event.currentTarget), "title"));
   };

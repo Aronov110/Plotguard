@@ -1,7 +1,7 @@
 import {
-  type FormEvent,
   type KeyboardEvent,
   type ReactElement,
+  type SubmitEvent as ReactSubmitEvent,
   useEffect,
   useId,
   useRef,
@@ -55,7 +55,7 @@ export function MoveItemForm({
     if (problem !== undefined) summaryRef.current?.focus();
   }, [problem]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
+  const handleSubmit = (event: ReactSubmitEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const value = readText(new FormData(event.currentTarget), "where");
     const chosen = destinations.find((destination) => destination.value === value);

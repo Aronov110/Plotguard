@@ -1,4 +1,10 @@
-import { type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type SubmitEvent as ReactSubmitEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { type DocumentDetail, documentsApi } from "../api/documents-api.ts";
 import { ApiError, NetworkError } from "../api/problem.ts";
 import { useAuth } from "../auth/session.tsx";
@@ -24,7 +30,7 @@ export interface UseAddItem {
   readonly summaryRef: RefObject<HTMLDivElement | null>;
   /** The message to show under the title, if any. */
   readonly titleError: string | undefined;
-  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly onSubmit: (event: ReactSubmitEvent<HTMLFormElement>) => void;
 }
 
 /**
@@ -48,7 +54,7 @@ export function useAddItem(titleFieldId: string, options: UseAddItemOptions): Us
     if (problem !== undefined) summaryRef.current?.focus();
   }, [problem]);
 
-  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+  const submit = async (event: ReactSubmitEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (running.current) return;
 
