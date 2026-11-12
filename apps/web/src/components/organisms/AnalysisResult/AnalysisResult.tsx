@@ -14,6 +14,8 @@ export interface AnalysisResultProps {
   /** Attach to the heading: the panel moves the focus there when a writer opens an earlier run. */
   readonly headingRef?: Ref<HTMLHeadingElement>;
   readonly onClose: () => void;
+  /** Called with the id of an item when a finding's link to it is pressed. */
+  readonly onOpenItem: (id: string) => void;
 }
 
 /**
@@ -25,6 +27,7 @@ export function AnalysisResult({
   titles,
   headingRef,
   onClose,
+  onOpenItem,
 }: AnalysisResultProps): ReactElement {
   const when = formatRunTime(analysis.createdAt);
   const scope = describeScope(analysis, titles);
@@ -65,6 +68,7 @@ export function AnalysisResult({
                     key={`${index}-${finding.title}`}
                     finding={finding}
                     titles={titles}
+                    onOpenItem={onOpenItem}
                   />
                 ))}
               </ol>

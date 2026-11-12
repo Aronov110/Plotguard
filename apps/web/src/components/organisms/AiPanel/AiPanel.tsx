@@ -18,6 +18,8 @@ export interface AiPanelProps {
   readonly openItem: { readonly id: string; readonly title: string } | undefined;
   /** The title of every item in the outline, by id: links and names in results use it. */
   readonly titles: ReadonlyMap<string, string>;
+  /** Called when a finding's link to an item is pressed: the screen moves the focus into its text. */
+  readonly onOpenItem: (id: string) => void;
 }
 
 /** Shows how long a scan has been running. The text is not a live region, so it is not read out. */
@@ -42,7 +44,7 @@ function Progress({ analysis, trouble }: { analysis: Analysis; trouble: boolean 
  * to read, the cost, the privacy notice with the Run button, the progress, the result, and the
  * earlier scans. Nothing is loaded until the panel is first opened.
  */
-export function AiPanel({ projectId, openItem, titles }: AiPanelProps): ReactElement {
+export function AiPanel({ projectId, openItem, titles, onOpenItem }: AiPanelProps): ReactElement {
   const ids = useId();
   const regionId = `${ids}-region`;
   const privacyId = `${ids}-privacy`;
@@ -177,6 +179,7 @@ export function AiPanel({ projectId, openItem, titles }: AiPanelProps): ReactEle
             titles={titles}
             headingRef={resultHeadingRef}
             onClose={panel.dismiss}
+            onOpenItem={onOpenItem}
           />
         ) : null}
 

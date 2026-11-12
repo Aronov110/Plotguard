@@ -83,6 +83,29 @@ test.describe("the plot-hole finder", () => {
     );
   });
 
+  test("a finding's link moves the focus into the text, also when that item is already open", async ({
+    page,
+    request,
+  }) => {
+    await openStory(page, request);
+    await page
+      .getByRole("navigation", { name: "Outline" })
+      .getByRole("link", { name: /Act One/ })
+      .click();
+    const text = page.getByRole("textbox", { name: "Text of “Act One”" });
+    await expect(text).toBeFocused();
+
+    await toggle(page).click();
+    await runButton(page).click();
+    await expect(findings(page)).toBeVisible({ timeout: RESULT_TIMEOUT });
+    await expect(text).not.toBeFocused();
+
+    // The fake quotes the start of "Act One", which is the item that is open.
+    await findings(page).getByRole("link", { name: "Act One" }).first().click();
+    await expect(page).toHaveURL(/\?document=/);
+    await expect(text).toBeFocused();
+  });
+
   test("reads the open item by default", async ({ page, request }) => {
     await openStory(page, request);
     await page

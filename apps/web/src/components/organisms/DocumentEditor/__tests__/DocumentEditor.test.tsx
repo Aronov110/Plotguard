@@ -581,3 +581,71 @@ describe("DocumentEditor: accessibility", () => {
     await expectNoA11yViolations(container);
   });
 });
+
+describe("DocumentEditor: a request to focus the text", () => {
+  async function renderWithSignal(document: DocumentDetail, signal: number) {
+    const context = await signedInManager();
+    const tree = (focusSignal: number) => (
+      <AuthProvider manager={context.manager}>
+        <DocumentEditor
+          projectId="project-1"
+          item={{ id: document.id, title: document.title }}
+          focusOnReady={false}
+          focusSignal={focusSignal}
+          onWordCount={vi.fn()}
+        />
+      </AuthProvider>
+    );
+    const view = render(tree(signal));
+    const box = (await screen.findByRole("textbox")) as HTMLTextAreaElement;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    return { ...view, box, again: (next: number) => view.rerender(tree(next)) };
+  }
+
+  it("moves the focus into the text when the request changes, though the item was already open", async () => {
+    const document = makeDocument();
+    answerDocument(document);
+    const { box, again } = await renderWithSignal(document, 0);
+    expect(box).not.toHaveFocus();
+
+    again(1);
+    await waitFor(() => expect(box).toHaveFocus());
+  });
+
+  it("moves it every time the request changes, also after the focus was taken elsewhere", async () => {
+    const document = makeDocument();
+    answerDocument(document);
+    const { box, again } = await renderWithSignal(document, 0);
+    again(1);
+    await waitFor(() => expect(box).toHaveFocus());
+
+    box.blur();
+    expect(box).not.toHaveFocus();
+    again(2);
+    await waitFor(() => expect(box).toHaveFocus());
+  });
+
+  it("leaves the focus alone when the request is the same as before", async () => {
+    const document = makeDocument();
+    answerDocument(document);
+    const { box, again } = await renderWithSignal(document, 0);
+    again(1);
+    await waitFor(() => expect(box).toHaveFocus());
+
+    box.blur();
+    again(1);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(box).not.toHaveFocus();
+  });
+
+  it("does not take the focus just because an item opens after an earlier request", async () => {
+    const document = makeDocument();
+    answerDocument(document);
+    const { box } = await renderWithSignal(document, 5);
+    expect(box).not.toHaveFocus();
+  });
+});

@@ -14,10 +14,19 @@ import { AnalysisResult } from "../AnalysisResult.tsx";
 
 const TITLES = new Map([["doc-1", "The harbour"]]);
 
-function renderResult(analysis: Analysis, onClose: () => void = () => undefined) {
+function renderResult(
+  analysis: Analysis,
+  onClose: () => void = () => undefined,
+  onOpenItem: (id: string) => void = () => undefined,
+) {
   return render(
     <MemoryRouter>
-      <AnalysisResult analysis={analysis} titles={TITLES} onClose={onClose} />
+      <AnalysisResult
+        analysis={analysis}
+        titles={TITLES}
+        onClose={onClose}
+        onOpenItem={onOpenItem}
+      />
     </MemoryRouter>,
   );
 }
@@ -109,6 +118,19 @@ describe("AnalysisResult", () => {
     renderResult(makeSucceeded([]), onClose);
     await userEvent.click(screen.getByRole("button", { name: "Close this result" }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes on which item a finding's link opens", async () => {
+    const onOpenItem = vi.fn();
+    renderResult(
+      makeSucceeded([
+        makeFinding({ evidence: [{ documentId: "doc-1", quote: "A quote.", verified: true }] }),
+      ]),
+      () => undefined,
+      onOpenItem,
+    );
+    await userEvent.click(screen.getByRole("link", { name: "The harbour" }));
+    expect(onOpenItem).toHaveBeenCalledWith("doc-1");
   });
 
   it("does not show a run that is still going as finished", () => {

@@ -51,7 +51,13 @@ async function renderPanel(props: Partial<AiPanelProps> = {}) {
   const view = render(
     <AuthProvider manager={context.manager}>
       <MemoryRouter initialEntries={["/app/projects/project-1/write"]}>
-        <AiPanel projectId="project-1" openItem={undefined} titles={TITLES} {...props} />
+        <AiPanel
+          projectId="project-1"
+          openItem={undefined}
+          titles={TITLES}
+          onOpenItem={() => undefined}
+          {...props}
+        />
       </MemoryRouter>
     </AuthProvider>,
   );
@@ -195,7 +201,12 @@ describe("AiPanel: what to read", () => {
     const tree = (openItem: AiPanelProps["openItem"]) => (
       <AuthProvider manager={context.manager}>
         <MemoryRouter>
-          <AiPanel projectId="project-1" openItem={openItem} titles={TITLES} />
+          <AiPanel
+            projectId="project-1"
+            openItem={openItem}
+            titles={TITLES}
+            onOpenItem={() => undefined}
+          />
         </MemoryRouter>
       </AuthProvider>
     );
@@ -280,6 +291,24 @@ describe("AiPanel: running a scan", () => {
     expect(screen.getByRole("button", { name: "Run the scan" })).not.toHaveAttribute(
       "aria-disabled",
     );
+  });
+
+  it("tells the screen which item a finding's link opens", async () => {
+    const onOpenItem = vi.fn();
+    const { api, pending, user } = await startedPanel({ onOpenItem });
+    api.get.mockResolvedValue(
+      makeSucceeded(
+        [
+          makeFinding({
+            evidence: [{ documentId: "doc-2", quote: "You are late.", verified: true }],
+          }),
+        ],
+        { id: pending.id },
+      ),
+    );
+    await flush(2000);
+    await user.click(screen.getByRole("link", { name: "The vault" }));
+    expect(onOpenItem).toHaveBeenCalledWith("doc-2");
   });
 
   it("closes a result", async () => {
