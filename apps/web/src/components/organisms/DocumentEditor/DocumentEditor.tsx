@@ -5,11 +5,28 @@ import { DOCUMENT_MAX_CHARACTERS } from "../../../lib/documents/count-text.ts";
 import { describeLoadError } from "../../../lib/documents/document-feedback.ts";
 import type { DocumentSaver } from "../../../lib/documents/document-saver.ts";
 import { useDocumentEditor } from "../../../lib/documents/use-document-editor.ts";
+import type { OutlineNode } from "../../../lib/documents/use-outline.ts";
 import { Button } from "../../atoms/Button/Button.tsx";
 import { ConflictNotice } from "../../molecules/ConflictNotice/ConflictNotice.tsx";
 import { ErrorSummary } from "../../molecules/ErrorSummary/ErrorSummary.tsx";
 import { SaveStatus } from "../../molecules/SaveStatus/SaveStatus.tsx";
+import { ItemToolbar } from "../ItemToolbar/ItemToolbar.tsx";
 import "./DocumentEditor.css";
+
+/**
+ * What the toolbar above the text needs from the screen. Without it the text has no toolbar (the
+ * writer can still read and write).
+ */
+export interface ItemActionsContext {
+  /** The outline as it is on the screen, which the moves are worked out from. */
+  readonly nodes: readonly OutlineNode[];
+  /** Reads the outline again after a rename or a move. */
+  readonly refresh: () => Promise<readonly OutlineNode[] | undefined>;
+  /** Called once the item has been deleted, so the screen can close it. */
+  readonly onDeleted: () => void;
+  /** Says something to a screen reader, from a place that outlives this item. */
+  readonly announce: (message: string) => void;
+}
 
 export interface DocumentEditorProps {
   readonly projectId: string;
@@ -19,6 +36,8 @@ export interface DocumentEditorProps {
   readonly focusOnReady: boolean;
   /** Called with the server's word count after the text is saved, so the outline can show it. */
   readonly onWordCount: (id: string, wordCount: number) => void;
+  /** Gives the toolbar for renaming, moving and deleting the item. */
+  readonly itemActions?: ItemActionsContext;
 }
 
 const words = (count: number): string =>
@@ -35,6 +54,7 @@ export function DocumentEditor({
   item,
   focusOnReady,
   onWordCount,
+  itemActions,
 }: DocumentEditorProps): ReactElement {
   const editor = useDocumentEditor(projectId, item.id);
   const { load } = editor;
@@ -54,6 +74,9 @@ export function DocumentEditor({
 
   return (
     <Writer
+      projectId={projectId}
+      itemId={item.id}
+      itemActions={itemActions}
       title={item.title}
       document={load.document}
       saver={load.saver}
@@ -65,6 +88,9 @@ export function DocumentEditor({
 }
 
 interface WriterProps {
+  readonly projectId: string;
+  readonly itemId: string;
+  readonly itemActions: ItemActionsContext | undefined;
   readonly title: string;
   readonly document: DocumentDetail;
   readonly saver: DocumentSaver;
@@ -74,6 +100,9 @@ interface WriterProps {
 }
 
 function Writer({
+  projectId,
+  itemId,
+  itemActions,
   title,
   document,
   saver,
@@ -163,6 +192,17 @@ function Writer({
       <h2 id={headingId} className="document-editor__title">
         {title}
       </h2>
+      {itemActions === undefined ? null : (
+        <ItemToolbar
+          projectId={projectId}
+          item={{ id: itemId, title }}
+          nodes={itemActions.nodes}
+          saver={saver}
+          refresh={itemActions.refresh}
+          onDeleted={itemActions.onDeleted}
+          announce={itemActions.announce}
+        />
+      )}
       {snapshot.status.kind === "conflict" ? (
         <ConflictNotice
           busy={conflictBusy}

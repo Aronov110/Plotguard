@@ -1,4 +1,4 @@
-import { type ReactElement, useId } from "react";
+import { type ReactElement, type Ref, useId } from "react";
 import { Link } from "react-router";
 import type { OutlineNode } from "../../../lib/documents/use-outline.ts";
 import "./OutlineNav.css";
@@ -14,6 +14,11 @@ export interface OutlineNavProps {
   readonly selectedId: string | undefined;
   /** Called when the writer picks an item, so the screen can move the focus into its text. */
   readonly onSelect: (id: string) => void;
+  /**
+   * Lets the screen move the focus to the heading, for example after the open item was deleted and
+   * there is nothing left to focus.
+   */
+  readonly headingRef?: Ref<HTMLHeadingElement>;
 }
 
 function words(count: number): string {
@@ -59,12 +64,17 @@ function OutlineList({
  * link that opens its text. Links (not buttons) because choosing an item changes the address, so the
  * Back button works and a writer can bookmark the scene they are on.
  */
-export function OutlineNav({ nodes, selectedId, onSelect }: OutlineNavProps): ReactElement {
+export function OutlineNav({
+  nodes,
+  selectedId,
+  onSelect,
+  headingRef,
+}: OutlineNavProps): ReactElement {
   const headingId = useId();
 
   return (
     <nav aria-labelledby={headingId} className="outline-nav">
-      <h2 id={headingId} className="outline-nav__heading">
+      <h2 id={headingId} ref={headingRef} tabIndex={-1} className="outline-nav__heading">
         Outline
       </h2>
       {nodes.length === 0 ? (

@@ -10,7 +10,9 @@ function renderConfirmation(props: Partial<DeleteConfirmationProps> = {}) {
   const onCancel = vi.fn();
   const view = render(
     <DeleteConfirmation
-      projectTitle="The Lighthouse"
+      title="The Lighthouse"
+      noun="project"
+      consequence="Its documents and analyses are deleted too, and this cannot be undone."
       busy={false}
       error={undefined}
       onConfirm={onConfirm}
@@ -119,7 +121,7 @@ describe("DeleteConfirmation", () => {
   });
 
   it("shows the project's title as plain text, whatever it contains", () => {
-    renderConfirmation({ projectTitle: "<script>alert(1)</script>" });
+    renderConfirmation({ title: "<script>alert(1)</script>" });
     expect(screen.getByRole("group")).toHaveTextContent("Delete “<script>alert(1)</script>”?");
     expect(document.querySelector("script")).toBeNull();
   });
@@ -128,21 +130,27 @@ describe("DeleteConfirmation", () => {
     const { container } = render(
       <>
         <DeleteConfirmation
-          projectTitle="A"
+          title="A"
+          noun="project"
+          consequence="Gone for good."
           busy={false}
           error={undefined}
           onConfirm={vi.fn()}
           onCancel={vi.fn()}
         />
         <DeleteConfirmation
-          projectTitle="B"
+          title="B"
+          noun="project"
+          consequence="Gone for good."
           busy
           onConfirm={vi.fn()}
           onCancel={vi.fn()}
           error={undefined}
         />
         <DeleteConfirmation
-          projectTitle="C"
+          title="C"
+          noun="project"
+          consequence="Gone for good."
           busy={false}
           error="A problem."
           onConfirm={vi.fn()}

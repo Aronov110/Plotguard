@@ -9,6 +9,7 @@ import {
   makeOutlineItem,
 } from "../../../test-support/documents-handlers.ts";
 import { problemResponse } from "../../../test-support/projects-handlers.ts";
+import { deferred } from "../../../test-support/session-harness.ts";
 import { signedInManager } from "../../../test-support/signed-in-manager.ts";
 import { AuthProvider } from "../../auth/session.tsx";
 import { buildTree, countNodes, findNode, type OutlineView, useOutline } from "../use-outline.ts";
@@ -306,3 +307,100 @@ function act_(callback: () => unknown): void {
     callback();
   });
 }
+
+describe("useOutline: reading the outline again (refresh)", () => {
+  it("shows the new order without going back to loading, and gives the new tree back", async () => {
+    const first = makeOutlineItem({ title: "First" });
+    const second = makeOutlineItem({ title: "Second" });
+    const calls = answerOutline([first, second], [second, first]);
+    const { result } = await renderOutline();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+
+    const seen: string[] = [];
+    let tree: readonly { readonly title: string }[] | undefined;
+    await act(async () => {
+      const pending = result.current.refresh();
+      seen.push(result.current.view.status); // the list stays while the new one is on its way
+      tree = await pending;
+    });
+
+    expect(seen).toEqual(["ready"]);
+    expect(calls).toHaveLength(2);
+    expect(tree?.map((node) => node.title)).toEqual(["Second", "First"]);
+    expect(ready(result).nodes.map((node) => node.title)).toEqual(["Second", "First"]);
+  });
+
+  it("shows a renamed title and a scene in its new act", async () => {
+    const actA = makeOutlineItem({ title: "Act A" });
+    const actB = makeOutlineItem({ title: "Act B" });
+    const scene = makeOutlineItem({ title: "Scene", parentId: actA.id });
+    answerOutline(
+      [actA, scene, actB],
+      [actA, actB, { ...scene, title: "Scene, renamed", parentId: actB.id }],
+    );
+    const { result } = await renderOutline();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    const nodes = ready(result).nodes;
+    expect(nodes[0]?.children).toEqual([]);
+    expect(nodes[1]?.children.map((node) => node.title)).toEqual(["Scene, renamed"]);
+  });
+
+  it("shows the problem, with the way to try again, and resolves with nothing when it fails", async () => {
+    answerOutline([makeOutlineItem()], () => problemResponse(503, "unavailable"));
+    const { result } = await renderOutline();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+
+    let tree: unknown = "unset";
+    await act(async () => {
+      tree = await result.current.refresh();
+    });
+
+    expect(tree).toBeUndefined();
+    expect(result.current.view).toEqual({
+      status: "failed",
+      message: "The service is busy. Try again in a moment.",
+    });
+  });
+
+  it("logs an unexpected failure, never an expected one", async () => {
+    answerOutline([makeOutlineItem()], () => HttpResponse.json({ items: "nonsense" }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { result } = await renderOutline();
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(result.current.view.status).toBe("failed");
+    log.mockRestore();
+  });
+
+  it("drops an answer for a project that has been left", async () => {
+    const slow = deferred<Response>();
+    answerOutline([makeOutlineItem({ title: "Old project" })]);
+    const { result, rerender } = await renderOutline("project-1");
+    await waitFor(() => expect(result.current.view.status).toBe("ready"));
+    const refreshOld = result.current.refresh;
+
+    answerOutline(() => slow.promise);
+    const pending = refreshOld();
+    // Let the request reach the fake server before the answers are changed.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    answerOutline([makeOutlineItem({ title: "New project" })]);
+    rerender({ id: "project-2" });
+    slow.resolve(HttpResponse.json({ items: [] }));
+    const late = await pending;
+
+    expect(late).toBeUndefined();
+    await waitFor(() =>
+      expect(ready(result).nodes.map((node) => node.title)).toEqual(["New project"]),
+    );
+  });
+});

@@ -140,3 +140,86 @@ export function describeLoadError(error: unknown, what: "outline" | "text" | "pr
   }
   return `The ${what} could not be loaded. Please try again.`;
 }
+
+/** The changes the item toolbar makes. */
+export type ItemAction = "rename" | "move" | "delete";
+
+/** What the toolbar shows after something went wrong. */
+export interface ItemActionProblem {
+  /** A message for the title field, when the API named the title. */
+  readonly title: string | undefined;
+  /** Messages that belong to no field. */
+  readonly general: readonly string[];
+}
+
+const PAST: Readonly<Record<ItemAction, string>> = {
+  rename: "renamed",
+  move: "moved",
+  delete: "deleted",
+};
+
+const NEWER_TEXT =
+  "Choose what to do about the newer text in the notice above the text, then try again.";
+
+/**
+ * Turns a failed rename, move or delete into words. The 400 messages for the title come from the API;
+ * the rest are fixed sentences. The technical `detail` of an error is never shown.
+ */
+export function describeItemActionError(error: unknown, action: ItemAction): ItemActionProblem {
+  const general = (message: string): ItemActionProblem => ({
+    title: undefined,
+    general: [message],
+  });
+
+  if (error instanceof NetworkError) {
+    return general("Can't reach the server. Check your connection and try again.");
+  }
+  if (!(error instanceof ApiError)) return general("Something went wrong. Please try again.");
+
+  switch (error.status) {
+    case 400: {
+      if (action === "rename") {
+        let title: string | undefined;
+        const other: string[] = [];
+        for (const issue of error.issues) {
+          if (issue.pointer === "/title") title ??= issue.message;
+          else other.push(issue.message);
+        }
+        if (title === undefined && other.length === 0) {
+          other.push("Please check the new title and try again.");
+        }
+        return { title, general: other };
+      }
+      return general("That is not possible here. Check the outline and try again.");
+    }
+    case 404:
+      return general("This item does not exist any more.");
+    case 412:
+      return general(
+        `This item was changed in another tab first, so it was not ${PAST[action]}. ${NEWER_TEXT}`,
+      );
+    case 429:
+      return general(tooManyRequests(error.retryAfterSeconds).replace("saves", "changes"));
+    case 502:
+    case 503:
+    case 504:
+      return general("The service is busy. Try again in a moment.");
+    default:
+      return general("Something went wrong. Please try again.");
+  }
+}
+
+/** Why a change did not even start: the text is in conflict, or the item is gone. */
+export function describeBlockedAction(
+  reason: "conflict" | "gone" | "left",
+  action: ItemAction,
+): string {
+  switch (reason) {
+    case "conflict":
+      return `The text was saved from another tab first, so nothing was ${PAST[action]}. ${NEWER_TEXT}`;
+    case "gone":
+      return "This item does not exist any more.";
+    case "left":
+      return "Something went wrong. Please try again.";
+  }
+}

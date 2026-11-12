@@ -88,7 +88,9 @@ export function ProjectEntry({
       <ProjectSummary project={project} to={writingPath(project.id)} />
       {mode === "confirming-delete" ? (
         <DeleteConfirmation
-          projectTitle={project.title}
+          title={project.title}
+          noun="project"
+          consequence="Its documents and analyses are deleted too, and this cannot be undone."
           busy={remove.busy}
           error={remove.error}
           onConfirm={remove.confirm}

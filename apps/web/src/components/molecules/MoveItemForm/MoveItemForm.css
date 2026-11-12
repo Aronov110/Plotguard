@@ -1,0 +1,24 @@
+.move-item-form {
+  max-width: 40rem;
+}
+
+.move-item-form__field {
+  margin: 0 0 var(--space-3);
+}
+
+.move-item-form__hint {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.move-item-form__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.move-item-form__status {
+  min-height: 1.5em;
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+}
