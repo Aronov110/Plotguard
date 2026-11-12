@@ -139,7 +139,8 @@ export async function documentsRoutes(
         summary: "Add an outline item",
         description:
           "Leave out `position` to put it last. Answers 409 when the project already has 1,000 " +
-          "items, and 404 for a project that does not exist or is not yours.",
+          "items, and 404 for a project that does not exist or is not yours. " +
+          "Answers 503 with `Retry-After` when other changes to the project keep it locked for more than five seconds; nothing was changed, so send it again.",
         security: [{ bearerAuth: [] }],
         params: documentsParamsSchema,
         body: createDocumentBodySchema,
@@ -200,7 +201,8 @@ export async function documentsRoutes(
           "gets 428, a malformed one (including `*` and lists) 400, and an out-of-date one 412, " +
           "in which case load the document again. A move renumbers the siblings; `position` is " +
           "counted among the siblings without this item. Leaving it out moves to the end when " +
-          "`parentId` changes.",
+          "`parentId` changes. " +
+          "Answers 503 with `Retry-After` when other changes to the project keep it locked for more than five seconds; nothing was changed, so send it again.",
         security: [{ bearerAuth: [] }],
         params: documentParamsSchema,
         headers: ifMatchHeadersSchema,
@@ -251,7 +253,8 @@ export async function documentsRoutes(
         description:
           "Permanent. The children of an act or chapter are deleted with it, and the siblings " +
           "move up. Answers 404 for a document that does not exist (also when it was already " +
-          "deleted) and for one that is not yours.",
+          "deleted) and for one that is not yours. " +
+          "Answers 503 with `Retry-After` when other changes to the project keep it locked for more than five seconds; nothing was changed, so send it again.",
         security: [{ bearerAuth: [] }],
         params: documentParamsSchema,
         response: { 204: z.null().describe("Deleted.") },

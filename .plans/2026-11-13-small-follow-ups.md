@@ -1,4 +1,4 @@
-Status: approved (2026-11-13), PRs 1 and 2 of 3 done (PR 2 pending review and merge). Decisions taken as recommended
+Status: done (2026-11-13), all three PRs built (PR 3 pending review and merge). Decisions taken as recommended
 ("a for all"): 1-A three PRs; 2-A a `cspell.json` for the spell checker; 3-A the lock timeout is 5
 seconds; 4-A the three heavy page tests get a 15-second timeout.
 
@@ -77,3 +77,20 @@ act and of its scenes, and keeps the analysis when the delete is refused. README
 loglines. A whole-suite browser run on `main` (before PR 2): 382 passed, 2 skipped, 2 failed; the two
 (WebKit, the two-tab tests of 4d-2) were 30-second timeouts while other heavy jobs ran on the same
 machine, and pass 3 of 3 when run alone in both browsers.
+
+PR 3: done as planned. Lint, typecheck and `bun audit` clean; API unit 941 -> 945 (4 new: `isLockTimeout`),
+API integration 776 -> 794 (18 new, in `documents-lock-timeout.integration.test.ts`); web untouched.
+Every document change (create, save, move, delete) sets `lock_timeout` for its own transaction
+(`set_config(..., true)`, five seconds by default, a service option) and a wait that runs out
+(SQLSTATE 55P03) is answered 503 with `Retry-After: 2` (the existing `ServiceBusyError`), with no
+`cause` so the query never reaches the log. Tests: a second connection holds the project row; each of
+the four changes gets 503 within the bounds and changes nothing, and the same request works after the
+release; reads, another project of the same person and a stranger (404, not 503) are not held up; a
+lock released in time makes the change succeed; twelve waiting changes (more than the ten pooled
+connections) all end with 503 and the pool still works; no lock setting is left on a connection;
+the log holds neither the title nor the text nor the query; invalid timeout values (0, negative,
+fractional, NaN, infinite) are refused with a RangeError. Mutation check, 4 of 4 caught (no timeout
+set; 503 not mapped; setting kept for the whole connection; timeout 100 times too long); 12 runs of the
+new file in a row all passed. Cost: one extra statement per change (about a millisecond). README and the
+route descriptions mention the 503. Not changed: the project routes (their changes do not wait for
+the documents lock) and the web screen (it already words a 503 and retries saves).
