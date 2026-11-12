@@ -38,6 +38,9 @@ export function WritingPage(): ReactElement {
   // The item the writer chose or added on this screen: its text takes the focus when it has loaded.
   // (An item opened by the address alone, such as after a reload, does not take it.)
   const [chosenId, setChosenId] = useState<string | undefined>(undefined);
+  // Counts the links in AI findings that were pressed. A link to the item that is already open
+  // changes nothing else on the screen, so the text is told to take the focus by this number.
+  const [focusSignal, setFocusSignal] = useState(0);
   const outlineHeadingRef = useRef<HTMLHeadingElement | null>(null);
   // What a screen reader is told after a rename, a move or a delete. It is kept here, not in the
   // toolbar, because a deleted item takes its toolbar away with it.
@@ -84,6 +87,13 @@ export function WritingPage(): ReactElement {
     setChosenId(undefined);
     setSearchParams({}, { replace: true });
     outlineHeadingRef.current?.focus();
+  };
+
+  // A link in an AI finding opens its item (the link changes the address). The text of an item that
+  // has to load takes the focus when it is ready; one that is open already is told by the signal.
+  const handleFindingLink = (id: string): void => {
+    setChosenId(id);
+    setFocusSignal((count) => count + 1);
   };
 
   const handleAdded = (document: DocumentDetail): void => {
@@ -148,6 +158,7 @@ export function WritingPage(): ReactElement {
           projectId={projectId}
           item={{ id: open.node.id, title: open.node.title }}
           focusOnReady={chosenId === open.node.id}
+          focusSignal={focusSignal}
           onWordCount={outline.setWordCount}
           itemActions={{
             nodes,
@@ -172,6 +183,7 @@ export function WritingPage(): ReactElement {
         projectId={projectId}
         openItem={open === undefined ? undefined : { id: open.node.id, title: open.node.title }}
         titles={titles}
+        onOpenItem={handleFindingLink}
       />
       {/* Always in the page, so that a screen reader is already listening when its text changes. */}
       <p role="status" className="visually-hidden">

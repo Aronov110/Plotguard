@@ -34,6 +34,12 @@ export interface DocumentEditorProps {
   readonly item: { readonly id: string; readonly title: string };
   /** Move the focus into the text when it has loaded. True when the writer chose this item. */
   readonly focusOnReady: boolean;
+  /**
+   * Moves the focus into the text each time this number changes, also when the item is already open
+   * (a link to an item that is open changes nothing else on the screen). The value it has when the
+   * text first appears is not a request.
+   */
+  readonly focusSignal?: number;
   /** Called with the server's word count after the text is saved, so the outline can show it. */
   readonly onWordCount: (id: string, wordCount: number) => void;
   /** Gives the toolbar for renaming, moving and deleting the item. */
@@ -53,6 +59,7 @@ export function DocumentEditor({
   projectId,
   item,
   focusOnReady,
+  focusSignal = 0,
   onWordCount,
   itemActions,
 }: DocumentEditorProps): ReactElement {
@@ -82,6 +89,7 @@ export function DocumentEditor({
       saver={load.saver}
       readAgain={editor.readAgain}
       focusOnReady={focusOnReady}
+      focusSignal={focusSignal}
       onWordCount={onWordCount}
     />
   );
@@ -96,6 +104,7 @@ interface WriterProps {
   readonly saver: DocumentSaver;
   readonly readAgain: () => Promise<DocumentDetail>;
   readonly focusOnReady: boolean;
+  readonly focusSignal: number;
   readonly onWordCount: (id: string, wordCount: number) => void;
 }
 
@@ -108,6 +117,7 @@ function Writer({
   saver,
   readAgain,
   focusOnReady,
+  focusSignal,
   onWordCount,
 }: WriterProps): ReactElement {
   const snapshot = useSyncExternalStore(saver.subscribe, saver.getSnapshot, saver.getSnapshot);
@@ -126,6 +136,15 @@ function Writer({
   useEffect(() => {
     if (focusOnReady) textRef.current?.focus();
   }, [focusOnReady]);
+
+  // A request to focus that comes while the text is on screen. The browser scrolls a focused box
+  // into view, which is the point: the request comes from a link far down the page.
+  const seenSignal = useRef(focusSignal);
+  useEffect(() => {
+    if (focusSignal === seenSignal.current) return;
+    seenSignal.current = focusSignal;
+    textRef.current?.focus();
+  }, [focusSignal]);
 
   // The outline shows the server's word count, so it is told when a save changes it.
   const { wordCount } = snapshot;

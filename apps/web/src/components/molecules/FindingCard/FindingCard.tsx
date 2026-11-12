@@ -12,6 +12,11 @@ export interface FindingCardProps {
   readonly finding: Finding;
   /** The title of each item that is still in the outline, by id. Only these get a link. */
   readonly titles: ReadonlyMap<string, string>;
+  /**
+   * Called with the id of the item when its link is pressed, so that the writing screen can move
+   * the focus into that item's text. The link itself already opens the item.
+   */
+  readonly onOpenItem: (id: string) => void;
 }
 
 /**
@@ -20,7 +25,7 @@ export interface FindingCardProps {
  * text is the AI's, so it is shown as plain text only. Severity and the quote check are in words,
  * never only in colour. A passage in an item that is still in the outline links to that item.
  */
-export function FindingCard({ finding, titles }: FindingCardProps): ReactElement {
+export function FindingCard({ finding, titles, onOpenItem }: FindingCardProps): ReactElement {
   return (
     <li className={`finding-card finding-card--${finding.severity}`}>
       <h4 className="finding-card__title">{finding.title}</h4>
@@ -34,7 +39,8 @@ export function FindingCard({ finding, titles }: FindingCardProps): ReactElement
 
       <ul className="finding-card__evidence" aria-label="Passages that show it">
         {finding.evidence.map((evidence, index) => {
-          const title = evidence.documentId === null ? undefined : titles.get(evidence.documentId);
+          const itemId = evidence.documentId;
+          const title = itemId === null ? undefined : titles.get(itemId);
           return (
             // The AI may quote the same passage twice, so the position is part of the key.
             // biome-ignore lint/suspicious/noArrayIndexKey: the list never changes after it is shown
@@ -51,10 +57,15 @@ export function FindingCard({ finding, titles }: FindingCardProps): ReactElement
                   ? "Found in your text."
                   : "Not found in your text. The AI may have invented or changed it."}
               </p>
-              {evidence.documentId !== null && title !== undefined ? (
+              {itemId !== null && title !== undefined ? (
                 <p className="finding-card__where">
                   In{" "}
-                  <Link to={{ search: `?document=${encodeURIComponent(evidence.documentId)}` }}>
+                  <Link
+                    to={{ search: `?document=${encodeURIComponent(itemId)}` }}
+                    onClick={() => {
+                      onOpenItem(itemId);
+                    }}
+                  >
                     {title}
                   </Link>
                 </p>

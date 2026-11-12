@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Finding } from "../../../../lib/api/analyses-api.ts";
 import { expectNoA11yViolations } from "../../../../test-support/a11y.ts";
 import { makeFinding } from "../../../../test-support/analyses-handlers.ts";
@@ -11,11 +12,15 @@ const TITLES = new Map([
   ["doc-2", "The vault"],
 ]);
 
-function renderCard(finding: Finding, titles: ReadonlyMap<string, string> = TITLES) {
+function renderCard(
+  finding: Finding,
+  titles: ReadonlyMap<string, string> = TITLES,
+  onOpenItem: (id: string) => void = () => undefined,
+) {
   return render(
     <MemoryRouter initialEntries={["/app/projects/p-1/write?document=doc-1"]}>
       <ul>
-        <FindingCard finding={finding} titles={titles} />
+        <FindingCard finding={finding} titles={titles} onOpenItem={onOpenItem} />
       </ul>
     </MemoryRouter>,
   );
@@ -137,6 +142,34 @@ describe("FindingCard", () => {
       }),
     );
     expect(screen.getAllByText("Same.")).toHaveLength(2);
+  });
+
+  it("tells the screen which item a link opens, so that the text can take the focus", async () => {
+    const onOpenItem = vi.fn();
+    renderCard(
+      makeFinding({
+        evidence: [
+          { documentId: "doc-2", quote: "You are late.", verified: true },
+          { documentId: "doc-1", quote: "The lighthouse.", verified: true },
+        ],
+      }),
+      TITLES,
+      onOpenItem,
+    );
+    await userEvent.click(screen.getByRole("link", { name: "The vault" }));
+    expect(onOpenItem).toHaveBeenCalledTimes(1);
+    expect(onOpenItem).toHaveBeenLastCalledWith("doc-2");
+
+    await userEvent.click(screen.getByRole("link", { name: "The harbour" }));
+    expect(onOpenItem).toHaveBeenCalledTimes(2);
+    expect(onOpenItem).toHaveBeenLastCalledWith("doc-1");
+  });
+
+  it("does not tell the screen anything when no link is pressed", async () => {
+    const onOpenItem = vi.fn();
+    renderCard(makeFinding(), TITLES, onOpenItem);
+    await userEvent.click(screen.getByText("Found in your text."));
+    expect(onOpenItem).not.toHaveBeenCalled();
   });
 
   it("has no accessibility violations", async () => {
