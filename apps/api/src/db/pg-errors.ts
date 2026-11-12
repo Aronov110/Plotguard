@@ -27,6 +27,14 @@ export function findPgError(error: unknown): PgErrorInfo | undefined {
   return undefined;
 }
 
+/**
+ * True when a statement gave up waiting for a lock (SQLSTATE 55P03, "lock_not_available"), which is
+ * what PostgreSQL reports when `lock_timeout` runs out.
+ */
+export function isLockTimeout(error: unknown): boolean {
+  return findPgError(error)?.code === "55P03";
+}
+
 /** True for a unique violation (23505), optionally only for one named constraint. */
 export function isUniqueViolation(error: unknown, constraint?: string): boolean {
   const info = findPgError(error);

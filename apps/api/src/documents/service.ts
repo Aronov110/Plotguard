@@ -1,8 +1,10 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client.ts";
+import { isLockTimeout } from "../db/pg-errors.ts";
 import { type Document, documents } from "../db/schema/documents.ts";
 import { projects } from "../db/schema/projects.ts";
-import { MAX_DOCUMENTS_PER_PROJECT } from "./limits.ts";
+import { ServiceBusyError } from "../errors/app-error.ts";
+import { DEFAULT_LOCK_TIMEOUT_MS, MAX_DOCUMENTS_PER_PROJECT } from "./limits.ts";
 import type {
   CreateDocumentInput,
   DocumentView,
@@ -98,24 +100,38 @@ class Rollback<T> extends Error {
   }
 }
 
+/**
+ * Runs a change in a transaction. No statement of it waits longer than `lockTimeoutMs` for a lock:
+ * the wait for the project lock is the one that can be long, and a change that gives up leaves
+ * nothing behind (the transaction rolls back) and is reported as 503 "busy".
+ */
 async function transact<T>(
   db: Database,
+  lockTimeoutMs: number,
   work: (tx: Transaction, leave: (result: T) => never) => Promise<T>,
 ): Promise<T> {
   const leave = (result: T): never => {
     throw new Rollback(result);
   };
   try {
-    return await db.transaction((tx) => work(tx, leave));
+    return await db.transaction(async (tx) => {
+      // `set_config(..., true)` is "set local": it lasts until this transaction ends, so a pooled
+      // connection never carries the setting over to the next request. (`SET` cannot take a parameter.)
+      await tx.execute(sql`select set_config('lock_timeout', ${`${lockTimeoutMs}ms`}, true)`);
+      return work(tx, leave);
+    });
   } catch (error) {
     if (error instanceof Rollback) return error.result as T;
+    // No `cause`: the database error carries the query, and nothing of it needs to be logged.
+    if (isLockTimeout(error)) throw new ServiceBusyError();
     throw error;
   }
 }
 
 /**
  * Locks the project row, checks that it is the person's, and moves it to the top of their list,
- * all in one statement. Must be the first statement of every change.
+ * all in one statement. Must be the first statement of every change (after `transact` has set the
+ * lock timeout, which waits for nothing).
  */
 async function lockProject(tx: Transaction, userId: string, projectId: string): Promise<boolean> {
   const rows = await tx
@@ -225,7 +241,20 @@ function arrange(rows: readonly OutlineItem[]): OutlineItem[] {
   );
 }
 
-export function createDocumentsService(db: Database): DocumentsService {
+export interface DocumentsServiceOptions {
+  /** How long a change waits for the project lock. Tests use a short one. */
+  readonly lockTimeoutMs?: number;
+}
+
+export function createDocumentsService(
+  db: Database,
+  options: DocumentsServiceOptions = {},
+): DocumentsService {
+  const lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
+  if (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs < 1) {
+    // 0 would switch the limit off in PostgreSQL, which is the opposite of what a caller means.
+    throw new RangeError("The lock timeout must be a whole number of milliseconds, at least 1.");
+  }
   return {
     async outline(userId, projectId) {
       const [project] = await db
@@ -253,7 +282,7 @@ export function createDocumentsService(db: Database): DocumentsService {
     },
 
     async create(userId, projectId, input) {
-      return transact<DocumentView | undefined>(db, async (tx, leave) => {
+      return transact<DocumentView | undefined>(db, lockTimeoutMs, async (tx, leave) => {
         if (!(await lockProject(tx, userId, projectId))) return leave(undefined);
 
         const [{ total } = { total: 0 }] = await tx
@@ -308,7 +337,7 @@ export function createDocumentsService(db: Database): DocumentsService {
     },
 
     async update(userId, projectId, id, expectedVersion, patch) {
-      return transact<DocumentView | undefined>(db, async (tx, leave) => {
+      return transact<DocumentView | undefined>(db, lockTimeoutMs, async (tx, leave) => {
         if (!(await lockProject(tx, userId, projectId))) return leave(undefined);
 
         const [current] = await tx
@@ -371,7 +400,7 @@ export function createDocumentsService(db: Database): DocumentsService {
     },
 
     async remove(userId, projectId, id) {
-      return transact<boolean>(db, async (tx, leave) => {
+      return transact<boolean>(db, lockTimeoutMs, async (tx, leave) => {
         if (!(await lockProject(tx, userId, projectId))) return leave(false);
 
         const [current] = await tx

@@ -55,6 +55,8 @@ export interface AppDependencies {
   readonly projectLimits?: ProjectLimits;
   /** Replaces the limits on the document routes. Tests use them to reach a limit quickly. */
   readonly documentLimits?: DocumentLimits;
+  /** How long a document change waits for the project lock. Tests use a short time. */
+  readonly documentLockTimeoutMs?: number;
 }
 
 /** Builds the Fastify app without listening, so tests can use `app.inject()`. */
@@ -141,7 +143,10 @@ export function buildApp(env: Env, deps: AppDependencies): FastifyInstance {
   app.register(documentsRoutes, {
     prefix: "/projects/:projectId/documents",
     auth,
-    documents: createDocumentsService(deps.database.db),
+    documents: createDocumentsService(
+      deps.database.db,
+      deps.documentLockTimeoutMs === undefined ? {} : { lockTimeoutMs: deps.documentLockTimeoutMs },
+    ),
     limits: deps.documentLimits ?? DEFAULT_DOCUMENT_LIMITS,
   });
 

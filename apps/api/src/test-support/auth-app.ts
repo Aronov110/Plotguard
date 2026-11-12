@@ -39,6 +39,8 @@ export interface AuthTestOptions {
   readonly limits?: Partial<AuthLimits>;
   readonly projectLimits?: ProjectLimits;
   readonly documentLimits?: DocumentLimits;
+  /** How long a document change waits for the project lock. Short, so a test need not wait. */
+  readonly documentLockTimeoutMs?: number;
 }
 
 /**
@@ -57,6 +59,9 @@ export async function buildAuthTestApp(options: AuthTestOptions = {}): Promise<A
     authLimits: { ...NO_LIMITS, ...options.limits },
     ...(options.projectLimits === undefined ? {} : { projectLimits: options.projectLimits }),
     ...(options.documentLimits === undefined ? {} : { documentLimits: options.documentLimits }),
+    ...(options.documentLockTimeoutMs === undefined
+      ? {}
+      : { documentLockTimeoutMs: options.documentLockTimeoutMs }),
   });
   await app.ready();
   return { app, handle, logs, close: () => app.close() };

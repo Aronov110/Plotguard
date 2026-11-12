@@ -239,7 +239,11 @@ project, is answered with 404, exactly like one that does not exist. Every answe
   up to 2.5 MiB (200,000 emoji written as JSON escapes are 2.4 MB); larger is 413.
 - **Changes are serialised per project.** Every create, save, move and delete first locks the
   project, so one change at a time runs per project, and it also moves the project to the top of
-  `GET /projects`. Two tabs of one writer therefore queue instead of racing.
+  `GET /projects`. Two tabs of one writer therefore queue instead of racing. A change that has to
+  wait more than five seconds for that lock gives up: **503** with `Retry-After: 2` and nothing
+  changed, so the request can simply be sent again. (A waiting change holds a database connection,
+  so without the limit a pile-up on one project could use up all of them.) The web screen already
+  words a 503 and retries saves by itself. Reads never wait for the lock.
 - Creating, saving, moving and deleting share a limit of 120 per minute per person, separate from
   the projects limit.
 

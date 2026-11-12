@@ -1,6 +1,6 @@
 import { DrizzleQueryError } from "drizzle-orm/errors";
 import { describe, expect, it } from "vitest";
-import { findPgError, isUniqueViolation } from "../pg-errors.ts";
+import { findPgError, isLockTimeout, isUniqueViolation } from "../pg-errors.ts";
 
 const driver = (code: string, constraint?: string) =>
   Object.assign(new Error("driver error"), { code, severity: "ERROR", constraint });
@@ -70,5 +70,31 @@ describe("isUniqueViolation", () => {
   it("is false for things that are not database errors", () => {
     expect(isUniqueViolation(new Error("x"))).toBe(false);
     expect(isUniqueViolation(undefined)).toBe(false);
+  });
+});
+
+describe("isLockTimeout", () => {
+  it("is true for the error PostgreSQL gives when lock_timeout runs out (55P03)", () => {
+    expect(isLockTimeout(driver("55P03"))).toBe(true);
+  });
+
+  it("finds it inside a Drizzle error, where the driver error is the cause", () => {
+    const wrapped = new DrizzleQueryError("update ...", [], driver("55P03"));
+    expect(isLockTimeout(wrapped)).toBe(true);
+  });
+
+  it("is false for other database errors, even similar ones", () => {
+    expect(isLockTimeout(driver("23505", "users_email_unique"))).toBe(false);
+    expect(isLockTimeout(driver("40P01"))).toBe(false); // deadlock detected
+    expect(isLockTimeout(driver("57014"))).toBe(false); // statement_timeout: query canceled
+    expect(isLockTimeout(driver("55P04"))).toBe(false);
+  });
+
+  it("is false for errors that are not database errors, and for things that are not errors", () => {
+    expect(isLockTimeout(new Error("55P03"))).toBe(false);
+    expect(isLockTimeout(Object.assign(new Error("x"), { code: "ECONNREFUSED" }))).toBe(false);
+    expect(isLockTimeout(undefined)).toBe(false);
+    expect(isLockTimeout(null)).toBe(false);
+    expect(isLockTimeout("55P03")).toBe(false);
   });
 });
