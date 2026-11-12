@@ -101,7 +101,7 @@ opens its writing screen.
 scenes inside them) beside the text of the open item. The open item is in the query string, so Back
 works and a link leads straight to a scene; choosing or adding an item moves the focus into its text.
 "Add to the outline" adds an act or chapter at the top level, or a scene inside the open act (one
-level of nesting). Renaming, moving and deleting items come in a later step.
+level of nesting).
 
 - **The text is a plain box**, kept exactly as typed (spaces, line breaks, emoji, any language). The
   box itself holds the text, not React, so a very long text (up to 200,000 characters) does not
@@ -118,6 +118,20 @@ level of nesting). Renaming, moving and deleting items come in a later step.
 - **Closing the tab with unsaved text asks first.** A tab closed within two seconds of the last
   keystroke, without that prompt being answered, can still lose those last words (a closing page
   cannot send a request that large).
+- **The open item can be renamed, moved and deleted** from a group of buttons above its text:
+  Rename, Move up, Move down, Move to… and Delete. Moving needs no dragging. "Move to…" is a list of
+  places (the top level, or inside an act or chapter), and the item goes to the end of the place
+  chosen; Move up and Move down place it exactly. An item that has scenes of its own cannot go inside
+  another item (the outline has one level), so it gets no "Move to…". A button that cannot do
+  anything now (the first item cannot go up) stays in place and stays focusable, marked unavailable,
+  so the focus never jumps. After a rename or a move the outline is read again from the server, and
+  the change is announced to screen readers. Delete asks first, names the item and how many scenes go
+  with it, and has "Keep item" focused; afterwards the item closes and the focus goes to the outline.
+- **A rename or a move takes its turn with the text saves.** It saves the pending text first, and
+  keeps the new version the server returns, so the writer's next text save does not conflict with
+  their own rename. Every accepted change raises the item's `version`, so another tab that has the
+  same item open gets the "changed somewhere else" notice on its next save (its text is safe, and
+  "Save my text over theirs" keeps the new title).
 
 After a login the person returns to the private page that sent them to the login. That address is
 checked by resolving it (`lib/navigation/safe-return-path.ts`), so `//evil.example`, `/\evil.example`

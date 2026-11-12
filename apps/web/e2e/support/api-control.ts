@@ -159,3 +159,49 @@ export async function deleteDocument(
     throw new Error(`Could not delete a test document (status ${response.status()}).`);
   }
 }
+
+/** One item of a project's outline as the API reports it. */
+export interface OutlineEntry {
+  readonly id: string;
+  readonly title: string;
+  readonly parentId: string | null;
+  readonly position: number;
+}
+
+/**
+ * Reads a project's outline straight through the API, so a test can check what the server really
+ * has after the screen renamed, moved or deleted something (and not only what the screen shows).
+ * Each top-level item is followed by its children, as the API gives them.
+ */
+export async function readOutline(
+  request: APIRequestContext,
+  user: TestUser,
+  projectId: string,
+): Promise<readonly OutlineEntry[]> {
+  const login = await request.post(`${API_ORIGIN}/auth/login`, {
+    headers: { Origin: WEB_ORIGIN },
+    data: { email: user.email, password: user.password },
+  });
+  if (login.status() !== 200) {
+    throw new Error(`Could not log in the test account (status ${login.status()}).`);
+  }
+  const body: unknown = await login.json();
+  const token =
+    typeof body === "object" && body !== null && "accessToken" in body
+      ? body.accessToken
+      : undefined;
+  if (typeof token !== "string") throw new Error("The login answer had no access token.");
+  const response = await request.get(`${API_ORIGIN}/projects/${projectId}/documents`, {
+    headers: { Origin: WEB_ORIGIN, Authorization: `Bearer ${token}` },
+  });
+  if (response.status() !== 200) {
+    throw new Error(`Could not read the test outline (status ${response.status()}).`);
+  }
+  const outline = (await response.json()) as { items: OutlineEntry[] };
+  return outline.items.map(({ id, title, parentId, position }) => ({
+    id,
+    title,
+    parentId,
+    position,
+  }));
+}

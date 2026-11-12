@@ -727,3 +727,351 @@ describe("document saver: leaving", () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("document saver: a change other than the text (exclusive)", () => {
+  it("calls the change with the version the saver has, and keeps the version and words it returns", async () => {
+    const { saver, ok } = setup({ text: "start", version: 4, wordCount: 1 });
+    const change = vi.fn().mockResolvedValue(ok(5, 1));
+
+    expect(await saver.exclusive(change)).toEqual({ ok: true });
+
+    expect(change).toHaveBeenCalledTimes(1);
+    expect(change).toHaveBeenCalledWith(4);
+    expect(saver.getSnapshot()).toMatchObject({ version: 5, wordCount: 1 });
+  });
+
+  it("saves the next text on top of the version the change returned, so the writer never conflicts with themselves", async () => {
+    const { saver, save, fire, status, ok } = setup();
+    save.mockResolvedValue(ok(3));
+
+    await saver.exclusive(() => Promise.resolve(ok(2)));
+    saver.change("start, more");
+    await fire();
+
+    expect(save).toHaveBeenCalledWith("start, more", 2);
+    expect(status()).toBe("saved");
+  });
+
+  it("saves the pending text first, then runs the change on the version that save returned", async () => {
+    const { saver, save, ok } = setup();
+    const order: string[] = [];
+    save.mockImplementation(() => {
+      order.push("save");
+      return Promise.resolve(ok(2));
+    });
+    const change = vi.fn((version: number) => {
+      order.push(`change on ${version}`);
+      return Promise.resolve(ok(3));
+    });
+
+    saver.change("start, more");
+    await saver.exclusive(change);
+
+    expect(order).toEqual(["save", "change on 2"]);
+    expect(saver.getSnapshot().version).toBe(3);
+  });
+
+  it("waits for a save that is already running before it takes its turn", async () => {
+    const { saver, save, fire, ok } = setup();
+    const running = deferred<SavedDocument>();
+    save.mockReturnValueOnce(running.promise);
+    const change = vi.fn().mockResolvedValue(ok(3));
+
+    saver.change("start, more");
+    await fire(); // the save is running
+    const result = saver.exclusive(change);
+    await settle();
+    expect(change).not.toHaveBeenCalled();
+
+    running.resolve(ok(2));
+    expect(await result).toEqual({ ok: true });
+    expect(change).toHaveBeenCalledWith(2);
+  });
+
+  it("says saving while the change runs, then saved", async () => {
+    const { saver, status, ok } = setup();
+    const gate = deferred<SavedDocument>();
+
+    const result = saver.exclusive(() => gate.promise);
+    await settle();
+    expect(status()).toBe("saving");
+
+    gate.resolve(ok(2));
+    await result;
+    expect(status()).toBe("saved");
+  });
+
+  it("saves text typed during the change afterwards, on the new version, and says unsaved meanwhile", async () => {
+    const { saver, save, live, fire, status, ok } = setup();
+    const gate = deferred<SavedDocument>();
+    save.mockResolvedValue(ok(3, 2));
+
+    const result = saver.exclusive(() => gate.promise);
+    await settle();
+    saver.change("start, more"); // typed during the change
+    expect(live()).toHaveLength(1);
+    gate.resolve(ok(2));
+    await result;
+
+    expect(status()).toBe("unsaved");
+    expect(save).not.toHaveBeenCalled();
+    await fire();
+    expect(save).toHaveBeenCalledWith("start, more", 2);
+    expect(status()).toBe("saved");
+  });
+
+  it("saves at once, on the new version, when the pause ended during the change", async () => {
+    const { saver, save, fire, status, ok } = setup();
+    const gate = deferred<SavedDocument>();
+    save.mockResolvedValue(ok(3, 2));
+
+    const result = saver.exclusive(() => gate.promise);
+    await settle();
+    saver.change("start, more");
+    await fire(); // the pause ended while the change was still running
+    expect(save).not.toHaveBeenCalled();
+
+    gate.resolve(ok(2));
+    await result;
+    await settle();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith("start, more", 2);
+    expect(status()).toBe("saved");
+  });
+
+  it("takes turns even when two changes start in the same moment", async () => {
+    const { saver, ok } = setup();
+    const gate = deferred<SavedDocument>();
+    const first = vi.fn(() => gate.promise);
+    const second = vi.fn().mockResolvedValue(ok(3));
+
+    const one = saver.exclusive(first);
+    const two = saver.exclusive(second); // no wait in between
+    await settle();
+    expect(first).toHaveBeenCalledWith(1);
+    expect(second).not.toHaveBeenCalled();
+
+    gate.resolve(ok(2));
+    await Promise.all([one, two]);
+    expect(second).toHaveBeenCalledWith(2);
+    expect(saver.getSnapshot().version).toBe(3);
+  });
+
+  it("takes turns: a second change waits for the first and starts from its version", async () => {
+    const { saver, ok } = setup();
+    const gate = deferred<SavedDocument>();
+    const first = vi.fn(() => gate.promise);
+    const second = vi.fn().mockResolvedValue(ok(3));
+
+    const one = saver.exclusive(first);
+    await settle();
+    const two = saver.exclusive(second);
+    await settle();
+    expect(second).not.toHaveBeenCalled();
+
+    gate.resolve(ok(2));
+    await Promise.all([one, two]);
+    expect(second).toHaveBeenCalledWith(2);
+    expect(saver.getSnapshot().version).toBe(3);
+  });
+
+  describe("when the server says no", () => {
+    it("a 412 is a conflict: the status says so, and nothing is saved by itself afterwards", async () => {
+      const { saver, save, live, status } = setup();
+      const result = await saver.exclusive(() => Promise.reject(apiError(412)));
+
+      expect(result).toEqual({ ok: false, reason: "conflict" });
+      expect(status()).toBe("conflict");
+      saver.change("start, more");
+      expect(live()).toEqual([]);
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it("a 404 means the document is gone", async () => {
+      const { saver, status } = setup();
+      const result = await saver.exclusive(() => Promise.reject(apiError(404)));
+      expect(result).toEqual({ ok: false, reason: "gone" });
+      expect(status()).toBe("gone");
+    });
+
+    it("a refused title (400) comes back as a failure and does not make the text invalid", async () => {
+      const { saver, save, fire, status, ok } = setup();
+      const refused = apiError(400, undefined, [{ pointer: "/title", message: "Enter a title." }]);
+
+      const result = await saver.exclusive(() => Promise.reject(refused));
+
+      expect(result).toEqual({ ok: false, reason: "failed", error: refused });
+      expect(status()).toBe("saved");
+      save.mockResolvedValue(ok(2));
+      saver.change("start, more");
+      await fire();
+      expect(save).toHaveBeenCalledWith("start, more", 1);
+    });
+
+    it("no connection comes back as a failure, with no retry of its own and the version unchanged", async () => {
+      const { saver, live, status } = setup();
+      const lost = new NetworkError();
+
+      const result = await saver.exclusive(() => Promise.reject(lost));
+
+      expect(result).toEqual({ ok: false, reason: "failed", error: lost });
+      expect(status()).toBe("saved");
+      expect(live()).toEqual([]);
+      expect(saver.getSnapshot().version).toBe(1);
+    });
+
+    it("a too-many-requests answer (429) is a failure too, and the text status stays", async () => {
+      const { saver, status } = setup();
+      const result = await saver.exclusive(() => Promise.reject(apiError(429, 3)));
+      expect(result).toMatchObject({ ok: false, reason: "failed" });
+      expect(status()).toBe("saved");
+    });
+
+    it("an error nobody expected comes back as it is, and is left for the caller to report", async () => {
+      const { saver, reportError } = setup();
+      const bug = new ResponseShapeError("odd");
+      const result = await saver.exclusive(() => Promise.reject(bug));
+      expect(result).toEqual({ ok: false, reason: "failed", error: bug });
+      expect(reportError).not.toHaveBeenCalled();
+    });
+
+    it("keeps the pending text after a failure, and saves it when the pause ends", async () => {
+      const { saver, save, fire, status, ok } = setup();
+      const gate = deferred<SavedDocument>();
+      save.mockResolvedValue(ok(2, 2));
+
+      const result = saver.exclusive(() => gate.promise);
+      await settle();
+      saver.change("start, more");
+      gate.reject(new NetworkError());
+      await result;
+
+      expect(status()).toBe("unsaved");
+      await fire();
+      expect(save).toHaveBeenCalledWith("start, more", 1);
+    });
+  });
+
+  describe("when it must not run", () => {
+    it("does nothing during a conflict, and says why", async () => {
+      const { saver, save, fire } = setup();
+      save.mockRejectedValueOnce(apiError(412));
+      saver.change("changed");
+      await fire();
+      const change = vi.fn();
+
+      expect(await saver.exclusive(change)).toEqual({ ok: false, reason: "conflict" });
+      expect(change).not.toHaveBeenCalled();
+    });
+
+    it("does nothing when the document is gone", async () => {
+      const { saver, save, fire } = setup();
+      save.mockRejectedValueOnce(apiError(404));
+      saver.change("changed");
+      await fire();
+      const change = vi.fn();
+
+      expect(await saver.exclusive(change)).toEqual({ ok: false, reason: "gone" });
+      expect(change).not.toHaveBeenCalled();
+    });
+
+    it("does nothing when the pending text meets a conflict while it is saved first", async () => {
+      const { saver, save } = setup();
+      save.mockRejectedValueOnce(apiError(412));
+      saver.change("changed");
+      const change = vi.fn();
+
+      expect(await saver.exclusive(change)).toEqual({ ok: false, reason: "conflict" });
+      expect(change).not.toHaveBeenCalled();
+    });
+
+    it("does nothing after the writer has left", async () => {
+      const { saver } = setup();
+      await saver.leave();
+      const change = vi.fn();
+      expect(await saver.exclusive(change)).toEqual({ ok: false, reason: "left" });
+      expect(change).not.toHaveBeenCalled();
+    });
+
+    it("does nothing after the document was abandoned", async () => {
+      const { saver } = setup();
+      saver.abandon();
+      const change = vi.fn();
+      expect(await saver.exclusive(change)).toEqual({ ok: false, reason: "left" });
+      expect(change).not.toHaveBeenCalled();
+    });
+  });
+
+  it("runs while the text is refused as invalid: the text is not part of the change", async () => {
+    const { saver, save, fire, status, ok } = setup();
+    save.mockRejectedValueOnce(apiError(400, undefined, [{ pointer: "/content", message: "No." }]));
+    saver.change("bad");
+    await fire();
+    expect(status()).toBe("invalid");
+
+    const change = vi.fn().mockResolvedValue(ok(2));
+    expect(await saver.exclusive(change)).toEqual({ ok: true });
+    expect(change).toHaveBeenCalledWith(1);
+  });
+
+  it("puts the retry message back when the text could not be saved before the change", async () => {
+    const { saver, save, status } = setup();
+    save.mockRejectedValue(new NetworkError());
+    saver.change("changed");
+    const change = vi.fn().mockResolvedValue({ version: 2, wordCount: 1 });
+
+    expect(await saver.exclusive(change)).toEqual({ ok: true });
+
+    expect(change).toHaveBeenCalledWith(1);
+    expect(status()).toBe("retrying");
+  });
+
+  it("tells its listeners about the new version", async () => {
+    const { saver, ok } = setup();
+    const listener = vi.fn();
+    saver.subscribe(listener);
+    await saver.exclusive(() => Promise.resolve(ok(2, 7)));
+    expect(listener).toHaveBeenCalled();
+    expect(saver.getSnapshot()).toMatchObject({ version: 2, wordCount: 7 });
+  });
+});
+
+describe("document saver: abandoning", () => {
+  it("stops the wait and saves nothing, however much is unsaved", async () => {
+    const { saver, save, live } = setup();
+    saver.change("changed");
+    saver.abandon();
+    expect(live()).toEqual([]);
+    await saver.leave();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("ignores text typed afterwards, and stops telling its listeners", () => {
+    const { saver, live } = setup();
+    const listener = vi.fn();
+    saver.subscribe(listener);
+    saver.abandon();
+    saver.change("typed after");
+    expect(live()).toEqual([]);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("cancels the retry of a failed save", async () => {
+    const { saver, save, fire, live } = setup();
+    save.mockRejectedValue(new NetworkError());
+    saver.change("changed");
+    await fire();
+    expect(live()).toHaveLength(1);
+    saver.abandon();
+    expect(live()).toEqual([]);
+  });
+
+  it("saves nothing when something asks it to save at once afterwards (a blur while the editor goes away)", async () => {
+    const { saver, save } = setup();
+    saver.change("changed");
+    saver.abandon();
+    await saver.flush();
+    expect(save).not.toHaveBeenCalled();
+  });
+});

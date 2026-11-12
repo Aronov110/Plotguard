@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useCallback, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { DocumentDetail } from "../../../lib/api/documents-api.ts";
 import { findNode, useOutline } from "../../../lib/documents/use-outline.ts";
@@ -27,6 +27,13 @@ export function WritingPage(): ReactElement {
   // The item the writer chose or added on this screen: its text takes the focus when it has loaded.
   // (An item opened by the address alone, such as after a reload, does not take it.)
   const [chosenId, setChosenId] = useState<string | undefined>(undefined);
+  const outlineHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  // What a screen reader is told after a rename, a move or a delete. It is kept here, not in the
+  // toolbar, because a deleted item takes its toolbar away with it.
+  const [announcement, setAnnouncement] = useState({ text: "", serial: 0 });
+  const announce = useCallback((text: string): void => {
+    setAnnouncement((previous) => ({ text, serial: previous.serial + 1 }));
+  }, []);
 
   usePageTitle(project.status === "ready" ? project.project.title : "Writing");
 
@@ -61,6 +68,13 @@ export function WritingPage(): ReactElement {
     );
   }
 
+  // The open item is gone: close it, and put the focus on the outline, the next place to work from.
+  const handleDeleted = (): void => {
+    setChosenId(undefined);
+    setSearchParams({}, { replace: true });
+    outlineHeadingRef.current?.focus();
+  };
+
   const handleAdded = (document: DocumentDetail): void => {
     outline.add(document);
     setChosenId(document.id);
@@ -87,7 +101,12 @@ export function WritingPage(): ReactElement {
   } else {
     side = (
       <>
-        <OutlineNav nodes={nodes} selectedId={documentId} onSelect={setChosenId} />
+        <OutlineNav
+          nodes={nodes}
+          selectedId={documentId}
+          onSelect={setChosenId}
+          headingRef={outlineHeadingRef}
+        />
         <AddItemForm projectId={projectId} inside={inside} onAdded={handleAdded} />
       </>
     );
@@ -117,6 +136,12 @@ export function WritingPage(): ReactElement {
           item={{ id: open.node.id, title: open.node.title }}
           focusOnReady={chosenId === open.node.id}
           onWordCount={outline.setWordCount}
+          itemActions={{
+            nodes,
+            refresh: outline.refresh,
+            onDeleted: handleDeleted,
+            announce,
+          }}
         />
       );
     }
@@ -130,6 +155,12 @@ export function WritingPage(): ReactElement {
         <div className="writing-page__side">{side}</div>
         <div className="writing-page__text">{text}</div>
       </div>
+      {/* Always in the page, so that a screen reader is already listening when its text changes. */}
+      <p role="status" className="visually-hidden">
+        {announcement.text === ""
+          ? ""
+          : announcement.text + (announcement.serial % 2 === 0 ? "\u00a0" : "")}
+      </p>
     </AppLayout>
   );
 }

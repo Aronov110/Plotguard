@@ -4,26 +4,32 @@ import { InlineError } from "../../atoms/InlineError/InlineError.tsx";
 import "./DeleteConfirmation.css";
 
 export interface DeleteConfirmationProps {
-  /** Named in the question, so there is no doubt which project is meant. */
-  readonly projectTitle: string;
+  /** Named in the question, so there is no doubt which one is meant. */
+  readonly title: string;
+  /** What is being deleted, in one word: "project", "item". It is in the buttons and the status. */
+  readonly noun: string;
+  /** What else is lost, as a sentence that says it cannot be undone. */
+  readonly consequence: string;
   /** The delete is running. */
   readonly busy: boolean;
   /** Why the last attempt failed, in words. */
   readonly error: string | undefined;
   readonly onConfirm: () => void;
-  /** Keep the project: close the question and change nothing. Also called by the Escape key. */
+  /** Keep it: close the question and change nothing. Also called by the Escape key. */
   readonly onCancel: () => void;
-  /** Attach to "Keep project": the question opens with the focus there, the safe choice. */
+  /** Attach to the keep button: the question opens with the focus there, the safe choice. */
   readonly keepRef?: Ref<HTMLButtonElement>;
 }
 
 /**
- * The question asked before a project is deleted. It says what will be lost and that it cannot be
- * undone. The safe answer ("Keep project") is the one that has the focus when the question opens,
- * so pressing Enter by accident deletes nothing; Escape also keeps the project.
+ * The question asked before something is deleted for good. It names it, says what will be lost and
+ * that it cannot be undone. The safe answer ("Keep project", "Keep item") is the one that has the
+ * focus when the question opens, so pressing Enter by accident deletes nothing; Escape also keeps it.
  */
 export function DeleteConfirmation({
-  projectTitle,
+  title,
+  noun,
+  consequence,
   busy,
   error,
   onConfirm,
@@ -50,8 +56,7 @@ export function DeleteConfirmation({
       onKeyDown={handleKeyDown}
     >
       <p className="delete-confirmation__text">
-        <strong id={questionId}>Delete “{projectTitle}”?</strong> Its documents and analyses are
-        deleted too, and this cannot be undone.
+        <strong id={questionId}>Delete “{title}”?</strong> {consequence}
       </p>
       {error === undefined ? null : (
         <div role="alert">
@@ -60,14 +65,14 @@ export function DeleteConfirmation({
       )}
       <div className="delete-confirmation__buttons">
         <Button variant="danger" busy={busy} onClick={onConfirm}>
-          Delete project
+          Delete {noun}
         </Button>
         <Button variant="secondary" ref={keepRef} onClick={onCancel}>
-          Keep project
+          Keep {noun}
         </Button>
       </div>
       <p role="status" className="delete-confirmation__status">
-        {busy ? "Deleting the project…" : null}
+        {busy ? `Deleting the ${noun}…` : null}
       </p>
     </fieldset>
   );

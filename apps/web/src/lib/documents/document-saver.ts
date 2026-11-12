@@ -42,6 +42,17 @@ export interface SavedDocument {
   readonly wordCount: number;
 }
 
+/**
+ * What {@link DocumentSaver.exclusive} gives back. A change that did not run, or failed, never
+ * touches the text status except where the server's answer is about the document itself.
+ */
+export type ExclusiveResult =
+  | { readonly ok: true }
+  /** It did not run: the document is in conflict, is gone, or the writer has left it. */
+  | { readonly ok: false; readonly reason: "conflict" | "gone" | "left" }
+  /** The server refused it, or could not be reached. The text status is as it was. */
+  | { readonly ok: false; readonly reason: "failed"; readonly error: unknown };
+
 export interface DocumentSaverDeps {
   /** Saves `text` on top of `version`. Throws `ApiError` or `NetworkError` when it fails. */
   readonly save: (text: string, version: number) => Promise<SavedDocument>;
@@ -76,6 +87,22 @@ export interface DocumentSaver {
   hasUnsaved(): boolean;
   /** Saves what is pending, then stops for good. Call it when the writer leaves the document. */
   leave(): Promise<void>;
+  /**
+   * Runs a change to the document other than its text (a new title, a new place) so that it takes
+   * turns with the text saves. It saves the pending text first, waits for any save that is running,
+   * then calls `change` with the version the server has and keeps the version the answer returns, so
+   * the next text save does not conflict with the writer's own change.
+   *
+   * A 412 or 404 from `change` is about the document itself and sets the status to conflict or
+   * gone. Any other failure (a refused title, no connection) comes back as `failed` and leaves the
+   * status of the text alone: the text is fine. Never rejects.
+   */
+  exclusive(change: (version: number) => Promise<SavedDocument>): Promise<ExclusiveResult>;
+  /**
+   * Stops for good without saving anything. For a document that has just been deleted: there is
+   * nothing left to save into.
+   */
+  abandon(): void;
 }
 
 function sameStatus(a: SaveStatus, b: SaveStatus): boolean {
@@ -134,6 +161,11 @@ export function createDocumentSaver(
     status = next;
     publish();
     return true;
+  }
+
+  /** Why nothing can be changed in this document, or `undefined` when something can. */
+  function refusal(): "conflict" | "gone" | undefined {
+    return status.kind === "conflict" || status.kind === "gone" ? status.kind : undefined;
   }
 
   function blocked(): boolean {
@@ -237,6 +269,8 @@ export function createDocumentSaver(
   }
 
   async function flush(): Promise<void> {
+    // After `abandon` there is nothing to save into. (`leave` flushes before it sets `left`.)
+    if (left) return;
     stopTimers();
     if (blocked()) return;
     for (let round = 0; round < MAX_FLUSH_ROUNDS; round += 1) {
@@ -318,6 +352,63 @@ export function createDocumentSaver(
     async leave() {
       if (left) return;
       await flush();
+      left = true;
+      stopTimers();
+      listeners.clear();
+    },
+
+    async exclusive(change) {
+      if (left) return { ok: false, reason: "left" };
+      const first = refusal();
+      if (first !== undefined) return { ok: false, reason: first };
+      await flush();
+      // Another save (or another change started in the same moment) may be running now. Once the loop
+      // ends, the check and the lock (`busy = true`) happen in one step, so nothing slips in between.
+      while (busy) await running;
+      if (left) return { ok: false, reason: "left" };
+      const second = refusal();
+      if (second !== undefined) return { ok: false, reason: second };
+
+      const before = status;
+      busy = true;
+      const outcome: { value: ExclusiveResult } = { value: { ok: true } };
+      const job = (async (): Promise<void> => {
+        try {
+          setStatus({ kind: "saving" });
+          const answer = await change(version);
+          version = answer.version;
+          wordCount = answer.wordCount;
+        } catch (error) {
+          const problem = error instanceof ApiError ? classifySaveError(error) : undefined;
+          if (problem?.kind === "conflict" || problem?.kind === "gone") {
+            outcome.value = { ok: false, reason: problem.kind };
+          } else {
+            outcome.value = { ok: false, reason: "failed", error };
+          }
+        } finally {
+          busy = false;
+        }
+      })();
+      running = job;
+      await job;
+
+      const { value: result } = outcome;
+      if (!result.ok && result.reason !== "failed" && result.reason !== "left") {
+        setStatus({ kind: result.reason });
+      } else if (latest === savedText) {
+        setStatus({ kind: "saved" });
+      } else if (before.kind === "retrying") {
+        setStatus(before);
+      } else {
+        setStatus({ kind: "unsaved" });
+      }
+      publish();
+      // The writer typed while the change ran, and the wait ended: save it now, on the new version.
+      if (pendingAttempt && !blocked()) void attempt();
+      return result;
+    },
+
+    abandon() {
       left = true;
       stopTimers();
       listeners.clear();

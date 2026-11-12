@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiJson } from "./http.ts";
+import { apiJson, apiRequest } from "./http.ts";
 
 // These mirror the API's response schemas (apps/api/src/documents/schemas.ts). Every answer is
 // checked when it arrives, so a changed API fails loudly here instead of showing garbage on a page.
@@ -79,6 +79,11 @@ export interface DocumentsApi {
     changes: UpdateDocumentInput,
     options: UpdateDocumentOptions,
   ): Promise<DocumentDetail>;
+  /**
+   * Deletes an item for good; the items inside an act or chapter go with it. Needs no version. 404
+   * means it was already gone.
+   */
+  remove(projectId: string, id: string, options?: DocumentCallOptions): Promise<void>;
 }
 
 /**
@@ -126,4 +131,12 @@ export const documentsApi: DocumentsApi = {
       json: changes,
       ...(signal === undefined ? {} : { signal }),
     }),
+
+  remove: async (projectId, id, { signal } = {}) => {
+    await apiRequest(documentsPath(projectId, id), {
+      method: "DELETE",
+      auth: true,
+      ...(signal === undefined ? {} : { signal }),
+    });
+  },
 };

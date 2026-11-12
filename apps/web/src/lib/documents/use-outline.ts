@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { type DocumentDetail, documentsApi, type OutlineItem } from "../api/documents-api.ts";
 import { ApiError, NetworkError } from "../api/problem.ts";
 import { useAuth } from "../auth/session.tsx";
@@ -76,6 +76,12 @@ export interface UseOutline {
   readonly add: (document: DocumentDetail) => void;
   /** Shows the word count the server gave after a save. */
   readonly setWordCount: (id: string, wordCount: number) => void;
+  /**
+   * Reads the outline again, after a rename or a move, and shows it. The list on the screen stays
+   * until the new one arrives. Resolves with the new items, or `undefined` when it could not be read
+   * (the outline then shows its problem, with "Try again"). Never rejects.
+   */
+  readonly refresh: () => Promise<readonly OutlineNode[] | undefined>;
 }
 
 interface State {
@@ -165,6 +171,27 @@ export function useOutline(projectId: string): UseOutline {
     };
   }, [projectId, attempt, withAuth]);
 
+  // The project this hook is showing now, so that an answer for a project that was left is dropped.
+  const current = useRef(projectId);
+  useEffect(() => {
+    current.current = projectId;
+  }, [projectId]);
+
+  const refresh = useCallback(async (): Promise<readonly OutlineNode[] | undefined> => {
+    const asked = projectId;
+    try {
+      const items = await withAuth(() => documentsApi.outline(asked));
+      if (current.current !== asked) return undefined;
+      dispatch({ type: "loaded", items });
+      return buildTree(items);
+    } catch (error) {
+      if (current.current !== asked) return undefined;
+      if (!(error instanceof ApiError) && !(error instanceof NetworkError)) console.error(error);
+      dispatch({ type: "failed", message: describeLoadError(error, "outline") });
+      return undefined;
+    }
+  }, [projectId, withAuth]);
+
   const retry = useCallback(() => {
     setAttempt((current) => current + 1);
   }, []);
@@ -182,5 +209,5 @@ export function useOutline(projectId: string): UseOutline {
         ? { status: "failed", message: state.message ?? describeLoadError(undefined, "outline") }
         : { status: "ready", nodes: state.nodes };
 
-  return { view, retry, add, setWordCount };
+  return { view, retry, add, setWordCount, refresh };
 }
