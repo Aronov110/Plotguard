@@ -13,6 +13,7 @@ export interface AnalysisJson {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  focus: string | null;
   result: {
     summary: string;
     findings: {
@@ -28,6 +29,22 @@ export interface AnalysisJson {
   errorCode: string | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+/** An idea run as the API returns it: the same fields, with ideas in the result. */
+export interface IdeasAnalysisJson extends Omit<AnalysisJson, "result"> {
+  result: {
+    summary: string;
+    ideas: {
+      title: string;
+      kind: string;
+      description: string;
+      whyItFits: string;
+      goesIn: string | null;
+      evidence: { documentId: string | null; quote: string; verified: boolean }[];
+    }[];
+    read: { items: number; characters: number };
+  } | null;
 }
 
 export interface EstimateJson {
@@ -89,6 +106,9 @@ export function analysesApi(app: FastifyInstance) {
 
 /** The usual request: look for plot holes in the whole project. */
 export const WHOLE_PROJECT = { kind: "plot_holes", scope: "project" } as const;
+
+/** An idea request for the whole project, with no focus. */
+export const IDEAS_PROJECT = { kind: "ideas", scope: "project" } as const;
 
 /** Starts a run through the API and returns it. Fails the test if the API refuses. */
 export async function startedAnalysis(

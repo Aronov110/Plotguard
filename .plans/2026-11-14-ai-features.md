@@ -1,4 +1,4 @@
-Status: approved (2026-11-14); PR 5a merged (#24); PR 5b built, pending review and merge. Decisions taken as recommended ("a for all"): 1-A the model is
+Status: approved (2026-11-14); PRs 5a (#24), 5b (#25) and the link fix (#26) merged; PR 5c-1 (ideas API) built, pending review and merge. Decisions taken as recommended ("a for all"): 1-A the model is
 `claude-opus-5-5` (about $0.30 a run, set by `AI_MODEL`); 2-A a background run with polling; 3-A limits of
 10 runs and 1,000,000 tokens per person per day and 5,000,000 tokens per day for everyone; 4-A the first
 release offers the open item and the whole project; 5-A the privacy notice is shown with the Run button
@@ -37,6 +37,26 @@ paging), `GET :id`, `POST :id/cancel`, `DELETE :id`; tests; README.
 As in the plan shown on 2026-11-14: a collapsible `AiPanel` on the writing screen with a cost hint, the
 privacy notice, results with links into the text, and the run history; then the idea prompt, schema and
 a "focus" field.
+
+## PR 5c: the idea generator (approved 2026-11-12: "a for all")
+
+Decisions: 1-A one panel with a mode choice ("Find plot holes" / "Get ideas"), shared scope, cost hint and
+privacy notice, the heading becomes "AI assistant", the history labels the kind; 2-A an optional focus
+field (free text, at most 500 characters, stored with the run); 3-A one shared daily allowance for both
+kinds; 4-A two PRs: **5c-1** the API (`feat/ai-ideas-api`) and **5c-2** the web (`feat/ai-ideas-web`).
+
+Shape of an answer: `summary`, and at most 8 `ideas`, best first. Each idea: `title`, `kind` (`plot_twist`,
+`scene`, `character`, `conflict`, `dialogue`, `theme`, `other`), `description`, `whyItFits`, one to three
+evidence quotes (verified against the text like findings) and the item it could go in. It brainstorms; it
+does not write the scene and must not contradict what the text establishes.
+
+API: migration `0004` adds `ai_analyses.focus` (nullable text, at most 500 characters; the kind `ideas` is
+already allowed by the table's check); `ai/prompts/ideas.ts`; `schemas.ts` gets the ideas schemas, `ideas`
+among the kinds, `focus` in the create body (400 for a plot-hole run) and `kind` in the estimate query;
+the stored and returned analysis becomes a union by `kind`; the service picks prompt, answer schema and
+checking by kind; the fake model answers a believable ideas result. The system prompt and manuscript stay
+identical across kinds so the cache keeps working. The focus is length-capped, stripped of control
+characters, delimited, and never logged.
 
 ## Test plan and edge cases
 
@@ -124,3 +144,25 @@ history with open and delete. No new dependency; the API is unchanged.
   on start can name a run in another project. The panel looks for it in this project and otherwise
   says so in words.
 - Open: no live run through the browser against the real model (only the fake); the idea generator (5c).
+
+## Outcome of PR 5c-1 (the idea generator API, `feat/ai-ideas-api`)
+
+Done as planned. Web is untouched (5c-2 follows).
+
+- Built: migration `0004` (`ai_analyses.focus`, at most 500 characters, a check); `ai/prompts/ideas.ts`;
+  `kind: "ideas"` in the create body, with an optional `focus` (one plain line, 400 for a plot-hole scan);
+  the stored and returned run is a union by `kind`, every run now carries `focus` (`null` when none); the
+  service picks the task, the answer shape and the checking by kind (quotes verified, `goesIn` kept only
+  when it names an item of the text); the fake model answers an ideas request with a believable idea.
+  Standing instructions and manuscript are byte-identical across kinds (a test), so the cache is reused.
+- Tests: API unit 1,113 -> 1,173; API integration 921 -> 950; lint, both typechecks and `bun audit`
+  clean; the new integration file passed three runs in a row. Mutation check: 12 real breaks, all caught
+  (focus not normalised, focus allowed for a plot-hole scan, limit off by one, blank focus kept, `goesIn`
+  not checked, quotes always verified, plot-hole task for ideas, focus not stored, ideas read back as plot
+  holes, body limit back to 1 KiB, answer shape not checked, fake not kind-aware).
+- Found by the tests: the start route's body limit (1 KiB, from 5a) would have refused a 500-character
+  focus in a language with 2-byte or longer characters as "too large"; it is now 4 KiB. Three older tests
+  changed on purpose: `ideas` used to be the example of a kind that does not exist, and every answer now
+  has a `focus` key.
+- Not verified: a live ideas run against the real model (one smoke test, a few cents, needs your approval);
+  the quality of the ideas is unmeasured. Migration `0004` is NOT applied to the development database yet.

@@ -1,5 +1,5 @@
 import { type AiClient, AiProviderError, type AiRequest, type AiUsage } from "../client.ts";
-import type { PlotHoleOutput } from "../schemas.ts";
+import { type IdeasOutput, ideasOutputSchema, type PlotHoleOutput } from "../schemas.ts";
 
 export const FAKE_USAGE: AiUsage = {
   inputTokens: 1200,
@@ -33,13 +33,18 @@ export interface FakeAiClient extends AiClient {
   readonly holding: number;
 }
 
-/** A believable answer for a plot-hole scan: one finding, quoting the start of the manuscript. */
-export function defaultOutput(request: AiRequest): PlotHoleOutput {
+/** The id of the first item in the manuscript, and the start of its text, as the model would see them. */
+function firstItem(request: AiRequest): { documentId: string; quote: string } {
   const header = /id: ([0-9a-f-]{36}) /.exec(request.manuscript);
-  const documentId = header?.[1] ?? "unknown";
   const lines = request.manuscript.split("\n");
   const headerAt = lines.findIndex((line) => /^<<<[0-9a-f]{16}>>> ITEM /.test(line));
   const text = headerAt === -1 ? undefined : lines[headerAt + 1];
+  return { documentId: header?.[1] ?? "unknown", quote: (text ?? "").slice(0, 40) || "no text" };
+}
+
+/** A believable answer for a plot-hole scan: one finding, quoting the start of the manuscript. */
+export function defaultOutput(request: AiRequest): PlotHoleOutput {
+  const { documentId, quote } = firstItem(request);
   return {
     summary: "The story mostly holds together, with one thing worth a second look.",
     findings: [
@@ -48,11 +53,36 @@ export function defaultOutput(request: AiRequest): PlotHoleOutput {
         severity: "moderate",
         category: "continuity",
         explanation: "Something in the first scene is contradicted later on.",
-        evidence: [{ documentId, quote: (text ?? "").slice(0, 40) || "no text" }],
+        evidence: [{ documentId, quote }],
         suggestion: "Make the two scenes agree.",
       },
     ],
   };
+}
+
+/** A believable answer for an idea request: one idea, building on the start of the manuscript. */
+export function defaultIdeasOutput(request: AiRequest): IdeasOutput {
+  const { documentId, quote } = firstItem(request);
+  return {
+    summary: "The story could grow in a few directions; one is worth trying first.",
+    ideas: [
+      {
+        title: "Let the first scene come back changed",
+        kind: "scene",
+        description: "Return to the opening place late in the story, and let it have changed.",
+        whyItFits: "The opening sets up a place the story can come back to.",
+        evidence: [{ documentId, quote }],
+        goesIn: documentId,
+      },
+    ],
+  };
+}
+
+/** The believable answer for whichever kind of request this is, told apart by its answer shape. */
+function answerFor(request: AiRequest): PlotHoleOutput | IdeasOutput {
+  return request.schema === ideasOutputSchema
+    ? defaultIdeasOutput(request)
+    : defaultOutput(request);
 }
 
 /**
@@ -72,7 +102,7 @@ export function createFakeAiClient(...initial: readonly FakeBehavior[]): FakeAiC
   ): ReturnType<AiClient["run"]> {
     if (signal.aborted) throw new AiProviderError("canceled");
     if (behavior === undefined || behavior.kind === "ok") {
-      const output = behavior?.output === undefined ? defaultOutput(request) : behavior.output;
+      const output = behavior?.output === undefined ? answerFor(request) : behavior.output;
       return { kind: "ok", output, usage: { ...FAKE_USAGE, ...behavior?.usage } };
     }
     switch (behavior.kind) {

@@ -197,7 +197,7 @@ async function finish(id: string): Promise<void> {
 
 describe("what a request to start a run may contain", () => {
   it.each([
-    ["a kind that does not exist yet", { kind: "ideas", scope: "project" }, "/kind"],
+    ["a kind that does not exist", { kind: "poems", scope: "project" }, "/kind"],
     ["a kind with another spelling", { kind: "plot-holes", scope: "project" }, "/kind"],
     ["no kind", { scope: "project" }, "/kind"],
     ["a scope that does not exist", { kind: "plot_holes", scope: "everything" }, "/scope"],
@@ -286,7 +286,7 @@ describe("what a request to start a run may contain", () => {
     for (const query of [
       {},
       { kind: "plot_holes" },
-      { kind: "ideas", scope: "project" },
+      { kind: "poems", scope: "project" },
       { kind: "plot_holes", scope: "document" },
       { kind: "plot_holes", scope: "project", documentId: SOME_ID },
       { kind: "plot_holes", scope: "project", extra: "1" },
@@ -402,6 +402,7 @@ describe("what an answer contains", () => {
         "createdAt",
         "documentId",
         "errorCode",
+        "focus",
         "id",
         "inputTokens",
         "kind",

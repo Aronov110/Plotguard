@@ -1,0 +1,2 @@
+ALTER TABLE "ai_analyses" ADD COLUMN "focus" text;--> statement-breakpoint
+ALTER TABLE "ai_analyses" ADD CONSTRAINT "ai_analyses_focus_length" CHECK ("ai_analyses"."focus" is null or char_length("ai_analyses"."focus") <= 500);

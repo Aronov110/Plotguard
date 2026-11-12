@@ -19,6 +19,7 @@ import {
 import { estimateRun } from "./estimate.ts";
 import { type AiConfig, USAGE_WINDOW_HOURS } from "./limits.ts";
 import { buildManuscript, type Manuscript, type ManuscriptItem } from "./manuscript.ts";
+import { ideasTask } from "./prompts/ideas.ts";
 import { manuscriptPreface, plotHoleTask, SYSTEM_PROMPT } from "./prompts/plot-holes.ts";
 import { quoteAppearsIn } from "./quote-check.ts";
 import {
@@ -27,6 +28,10 @@ import {
   type AnalysisScope,
   type AnalysisView,
   type EstimateView,
+  type IdeasOutput,
+  type IdeasResult,
+  ideasOutputSchema,
+  ideasResultSchema,
   type PlotHoleOutput,
   type PlotHoleResult,
   plotHoleOutputSchema,
@@ -40,6 +45,8 @@ export interface AnalysisTarget {
   readonly scope: AnalysisScope;
   /** The item to look at, for a scope of `document`. */
   readonly documentId?: string | undefined;
+  /** What the writer wants the ideas to be about, as one plain line (ideas only). */
+  readonly focus?: string | undefined;
 }
 
 export interface AiServiceOptions {
@@ -144,24 +151,79 @@ function codeFor(error: unknown): AnalysisErrorCode {
   return "internal";
 }
 
+/** The text of each item the model may name, by id. */
+function textsOf(manuscript: Manuscript): ReadonlyMap<string, string> {
+  return new Map(manuscript.items.map((item) => [item.id, item.content]));
+}
+
+/**
+ * Looks each quote up in the real text of the item the model named. An item that is not in the
+ * manuscript is `null`, and a quote that is not really there is not `verified`.
+ */
+function verifyEvidence(
+  evidence: readonly { readonly documentId: string; readonly quote: string }[],
+  textOf: ReadonlyMap<string, string>,
+) {
+  return evidence.map((entry) => {
+    const text = textOf.get(entry.documentId);
+    return {
+      documentId: text === undefined ? null : entry.documentId,
+      quote: entry.quote,
+      verified: text !== undefined && quoteAppearsIn(entry.quote, text),
+    };
+  });
+}
+
+function readOf(manuscript: Manuscript) {
+  return { items: manuscript.items.length, characters: manuscript.characters };
+}
+
 /** Everything the model's answer is checked against: the ids it may name, and each item's text. */
 function verify(output: PlotHoleOutput, manuscript: Manuscript): PlotHoleResult {
-  const textOf = new Map(manuscript.items.map((item) => [item.id, item.content]));
+  const textOf = textsOf(manuscript);
   return {
     summary: output.summary,
     findings: output.findings.map((finding) => ({
       ...finding,
-      evidence: finding.evidence.map((entry) => {
-        const text = textOf.get(entry.documentId);
-        return {
-          documentId: text === undefined ? null : entry.documentId,
-          quote: entry.quote,
-          verified: text !== undefined && quoteAppearsIn(entry.quote, text),
-        };
-      }),
+      evidence: verifyEvidence(finding.evidence, textOf),
     })),
-    read: { items: manuscript.items.length, characters: manuscript.characters },
+    read: readOf(manuscript),
   };
+}
+
+/** Like {@link verify}, for ideas. An item the idea could go into must also be in the manuscript. */
+function verifyIdeas(output: IdeasOutput, manuscript: Manuscript): IdeasResult {
+  const textOf = textsOf(manuscript);
+  return {
+    summary: output.summary,
+    ideas: output.ideas.map((idea) => ({
+      ...idea,
+      evidence: verifyEvidence(idea.evidence, textOf),
+      goesIn: textOf.has(idea.goesIn) ? idea.goesIn : null,
+    })),
+    read: readOf(manuscript),
+  };
+}
+
+/** What a model answer becomes once it is checked: the stored result, or `undefined` if it is invalid. */
+function checkAnswer(
+  kind: AnalysisKind,
+  output: unknown,
+  manuscript: Manuscript,
+): PlotHoleResult | IdeasResult | undefined {
+  if (kind === "ideas") {
+    const checked = ideasOutputSchema.safeParse(output);
+    return checked.success ? verifyIdeas(checked.data, manuscript) : undefined;
+  }
+  const checked = plotHoleOutputSchema.safeParse(output);
+  return checked.success ? verify(checked.data, manuscript) : undefined;
+}
+
+/** The task and the answer shape of a kind. */
+function requestPartsFor(target: AnalysisTarget) {
+  return target.kind === "ideas"
+    ? { task: ideasTask(target.scope, target.focus), schema: ideasOutputSchema }
+    : { task: plotHoleTask(target.scope), schema: plotHoleOutputSchema };
 }
 
 function totalInput(usage: AiUsage): number {
@@ -169,22 +231,26 @@ function totalInput(usage: AiUsage): number {
 }
 
 function toView(row: AiAnalysis): AnalysisView {
-  const parsed = row.result === null ? undefined : plotHoleResultSchema.safeParse(row.result);
-  return {
+  const base = {
     id: row.id,
     projectId: row.projectId,
     documentId: row.documentId,
-    kind: row.kind as AnalysisKind,
     scope: row.scope as AnalysisScope,
     status: row.status,
     model: row.model,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
-    result: parsed?.success ? parsed.data : null,
+    focus: row.focus,
     errorCode: row.errorCode as AnalysisErrorCode | null,
     createdAt: row.createdAt.toISOString(),
-    completedAt: row.completedAt === null ? null : row.completedAt.toISOString(),
+    completedAt: row.completedAt?.toISOString() ?? null,
   };
+  if (row.kind === "ideas") {
+    const parsed = row.result === null ? undefined : ideasResultSchema.safeParse(row.result);
+    return { ...base, kind: "ideas", result: parsed?.success ? parsed.data : null };
+  }
+  const parsed = row.result === null ? undefined : plotHoleResultSchema.safeParse(row.result);
+  return { ...base, kind: "plot_holes", result: parsed?.success ? parsed.data : null };
 }
 
 export function createAiService(db: Database, options: AiServiceOptions): AiService {
@@ -290,7 +356,7 @@ export function createAiService(db: Database, options: AiServiceOptions): AiServ
   async function finish(
     id: string,
     outcome:
-      | { status: "succeeded"; result: PlotHoleResult; usage: AiUsage }
+      | { status: "succeeded"; result: PlotHoleResult | IdeasResult; usage: AiUsage }
       | { status: "failed"; errorCode: AnalysisErrorCode; usage?: AiUsage | undefined },
   ): Promise<void> {
     const usage = outcome.usage;
@@ -326,8 +392,7 @@ export function createAiService(db: Database, options: AiServiceOptions): AiServ
         {
           system: SYSTEM_PROMPT,
           manuscript: `${manuscriptPreface(manuscript)}${manuscript.text}`,
-          task: plotHoleTask(target.scope),
-          schema: plotHoleOutputSchema,
+          ...requestPartsFor(target),
           model: config.model,
           effort: config.effort,
           maxOutputTokens: config.maxOutputTokens,
@@ -358,8 +423,8 @@ export function createAiService(db: Database, options: AiServiceOptions): AiServ
           });
           return;
         case "ok": {
-          const checked = plotHoleOutputSchema.safeParse(outcome.output);
-          if (!checked.success) {
+          const result = checkAnswer(target.kind, outcome.output, manuscript);
+          if (result === undefined) {
             await finish(analysisId, {
               status: "failed",
               errorCode: "invalid_output",
@@ -369,7 +434,7 @@ export function createAiService(db: Database, options: AiServiceOptions): AiServ
           }
           await finish(analysisId, {
             status: "succeeded",
-            result: verify(checked.data, manuscript),
+            result,
             usage: outcome.usage,
           });
           return;
@@ -492,6 +557,7 @@ export function createAiService(db: Database, options: AiServiceOptions): AiServ
             projectId,
             documentId: target.scope === "document" ? (target.documentId ?? null) : null,
             kind: target.kind,
+            focus: target.kind === "ideas" ? (target.focus ?? null) : null,
             scope: target.scope,
             model: config.model,
           })

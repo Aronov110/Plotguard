@@ -29,6 +29,13 @@
       "when": 1794487317686,
       "tag": "0003_one_pending_ai_run_per_user",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794508666823,
+      "tag": "0004_ai_analysis_focus",
+      "breakpoints": true
     }
   ]
 }
