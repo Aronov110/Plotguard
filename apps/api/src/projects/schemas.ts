@@ -14,6 +14,13 @@ export const characters = (text: string): number => [...text].length;
 /** PostgreSQL text cannot hold a NUL character; it would fail with a 500 instead of a 400. */
 export const hasNoNul = (text: string): boolean => !text.includes("\u0000");
 
+/**
+ * A lone surrogate half (a broken emoji) cannot be stored as UTF-8: the database driver would write
+ * U+FFFD in its place without a word, so the stored text would differ from what was sent. It is
+ * refused instead of altered.
+ */
+export const isWellFormed = (text: string): boolean => text.isWellFormed();
+
 /** Stops absurd values early; the exact limits are the checks below. 4 units cover any character. */
 export const unitCeiling = (maxCharacters: number): number => maxCharacters * 4;
 
@@ -26,6 +33,7 @@ export const title = z
     error: `The title can be at most ${TITLE_MAX_CHARACTERS} characters.`,
   })
   .refine(hasNoNul, { error: "The title cannot contain a null character." })
+  .refine(isWellFormed, { error: "The title contains an invalid character." })
   .describe(`1 to ${TITLE_MAX_CHARACTERS} characters. Spaces at both ends are removed.`);
 
 /** A blank logline is stored as no logline, so an empty text and `null` mean the same. */
@@ -37,6 +45,7 @@ const logline = z
     error: `The logline can be at most ${LOGLINE_MAX_CHARACTERS} characters.`,
   })
   .refine(hasNoNul, { error: "The logline cannot contain a null character." })
+  .refine(isWellFormed, { error: "The logline contains an invalid character." })
   .describe(`Up to ${LOGLINE_MAX_CHARACTERS} characters. Blank or null means no logline.`);
 
 const format = z.enum(PROJECT_FORMATS, { error: "The format must be screenplay, prose or other." });

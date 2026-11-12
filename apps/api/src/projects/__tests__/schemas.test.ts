@@ -11,6 +11,11 @@ import {
 const messages = (result: { success: boolean; error?: { issues: { message: string }[] } }) =>
   result.error?.issues.map((issue) => issue.message) ?? [];
 
+// The two halves of an emoji. Alone, a half cannot be stored as UTF-8: the database driver would
+// silently write U+FFFD in its place. Built from code units so the source has no invisible characters.
+const HIGH_SURROGATE = String.fromCharCode(0xd83d);
+const LOW_SURROGATE = String.fromCharCode(0xde00);
+
 describe("create project body: title", () => {
   const parse = (title: unknown) =>
     createProjectBodySchema.safeParse({ title, format: "screenplay" });
@@ -68,6 +73,25 @@ describe("create project body: title", () => {
     const result = parse("bad\u0000title");
     expect(result.success).toBe(false);
     expect(messages(result)).toContain("The title cannot contain a null character.");
+  });
+
+  it.each([
+    ["a lone high surrogate", `broken ${HIGH_SURROGATE} emoji`],
+    ["a lone low surrogate", `broken ${LOW_SURROGATE} emoji`],
+    ["a high surrogate at the end", `a${HIGH_SURROGATE}`],
+    ["a low surrogate at the start", `${LOW_SURROGATE}a`],
+    ["two high surrogates in a row", `${HIGH_SURROGATE}${HIGH_SURROGATE}`],
+    ["the halves in the wrong order", `${LOW_SURROGATE}${HIGH_SURROGATE}`],
+  ])("refuses a title with %s, which would silently turn into U+FFFD", (_name, text) => {
+    const result = parse(text);
+    expect(result.success).toBe(false);
+    expect(messages(result)).toContain("The title contains an invalid character.");
+  });
+
+  it("accepts a title with a whole emoji and with other characters outside the basic plane", () => {
+    expect(parse("a 😀 b").success).toBe(true);
+    expect(parse("𝒳𝒴𝒵").success).toBe(true);
+    expect(parse(`${HIGH_SURROGATE}${LOW_SURROGATE}`).success).toBe(true);
   });
 
   it("refuses a huge title early", () => {
@@ -153,6 +177,21 @@ describe("create project body: logline", () => {
 
   it("refuses a NUL character", () => {
     expect(parse("a\u0000b").success).toBe(false);
+  });
+
+  it.each([
+    ["a lone high surrogate", `x ${HIGH_SURROGATE} y`],
+    ["a lone low surrogate", `x ${LOW_SURROGATE} y`],
+    ["the halves in the wrong order", `${LOW_SURROGATE}${HIGH_SURROGATE}`],
+  ])("refuses a logline with %s, which would silently turn into U+FFFD", (_name, text) => {
+    const result = parse(text);
+    expect(result.success).toBe(false);
+    expect(messages(result)).toContain("The logline contains an invalid character.");
+  });
+
+  it("accepts a logline with a whole emoji", () => {
+    expect(parse("A 😀 story").success).toBe(true);
+    expect(parse(`${HIGH_SURROGATE}${LOW_SURROGATE}`).success).toBe(true);
   });
 
   it.each([

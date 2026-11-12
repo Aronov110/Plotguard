@@ -199,6 +199,10 @@ All under `/projects`, all need `Authorization: Bearer <access token>`; the full
 
 Creating, changing and deleting share a limit of 60 per minute per person.
 
+Titles and loglines (and the titles of documents) are stored exactly as sent, apart from the spaces
+at both ends, which are removed. A NUL character or a broken emoji (a lone surrogate half) is refused
+with 400, because the database cannot store it and would silently write U+FFFD in its place.
+
 ## Documents
 
 The outline (acts, chapters, scenes) and the text of one project. All under

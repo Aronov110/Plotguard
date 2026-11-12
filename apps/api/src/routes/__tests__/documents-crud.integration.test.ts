@@ -1,4 +1,7 @@
+import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
+import { aiAnalyses } from "../../db/schema/ai-analyses.ts";
+import { insertAiAnalysis } from "../../db/test-support/factories.ts";
 import { type AuthTestApp, buildAuthTestApp } from "../../test-support/auth-app.ts";
 import {
   createdDocument,
@@ -151,6 +154,89 @@ describe("deleting", () => {
     await api.remove(person, project.id, act.id);
     expect((await api.get(person, project.id, scene.id)).statusCode).toBe(404);
     expect(await outlineTitles(t.app, person, project.id)).toEqual([]);
+  });
+
+  describe("the AI analyses of a deleted document are kept", () => {
+    const analysesOf = async (projectId: string) =>
+      (await t.handle.db.select().from(aiAnalyses).where(eq(aiAnalyses.projectId, projectId))).map(
+        (row) => ({ id: row.id, documentId: row.documentId }),
+      );
+
+    it("keeps the analysis and unlinks it from the deleted document", async () => {
+      const { api, person, project } = await setup();
+      const doc = await createdDocument(t.app, person, project.id);
+      const analysis = await insertAiAnalysis(t.handle.db, person.id, project.id, {
+        documentId: doc.id,
+        scope: "document",
+      });
+
+      expect((await api.remove(person, project.id, doc.id)).statusCode).toBe(204);
+
+      expect(await analysesOf(project.id)).toEqual([{ id: analysis.id, documentId: null }]);
+    });
+
+    it("leaves the analyses of other documents and of the whole project as they were", async () => {
+      const { api, person, project } = await setup();
+      const gone = await createdDocument(t.app, person, project.id, { title: "Gone" });
+      const kept = await createdDocument(t.app, person, project.id, { title: "Kept" });
+      const ofGone = await insertAiAnalysis(t.handle.db, person.id, project.id, {
+        documentId: gone.id,
+        scope: "document",
+      });
+      const ofKept = await insertAiAnalysis(t.handle.db, person.id, project.id, {
+        documentId: kept.id,
+        scope: "document",
+      });
+      const ofProject = await insertAiAnalysis(t.handle.db, person.id, project.id, {
+        documentId: null,
+        scope: "project",
+      });
+
+      await api.remove(person, project.id, gone.id);
+
+      const rows = await analysesOf(project.id);
+      expect(rows).toHaveLength(3);
+      expect(rows).toContainEqual({ id: ofGone.id, documentId: null });
+      expect(rows).toContainEqual({ id: ofKept.id, documentId: kept.id });
+      expect(rows).toContainEqual({ id: ofProject.id, documentId: null });
+    });
+
+    it("unlinks the analyses of an act and of its scenes when the act is deleted", async () => {
+      const { api, person, project } = await setup();
+      const act = await createdDocument(t.app, person, project.id, { title: "Act" });
+      const scene = await createdDocument(t.app, person, project.id, {
+        title: "Scene",
+        parentId: act.id,
+      });
+      await insertAiAnalysis(t.handle.db, person.id, project.id, {
+        documentId: act.id,
+        scope: "document",
+      });
+      await insertAiAnalysis(t.handle.db, person.id, project.id, {
+        documentId: scene.id,
+        scope: "document",
+      });
+
+      await api.remove(person, project.id, act.id);
+
+      const rows = await analysesOf(project.id);
+      expect(rows).toHaveLength(2);
+      expect(rows.every((row) => row.documentId === null)).toBe(true);
+    });
+
+    it("keeps the analysis when the delete is refused (someone else's project)", async () => {
+      const { api, person, project } = await setup();
+      const doc = await createdDocument(t.app, person, project.id);
+      const analysis = await insertAiAnalysis(t.handle.db, person.id, project.id, {
+        documentId: doc.id,
+        scope: "document",
+      });
+      const stranger = await newPerson(t.app);
+
+      expect((await api.remove(stranger, project.id, doc.id)).statusCode).toBe(404);
+
+      expect(await analysesOf(project.id)).toEqual([{ id: analysis.id, documentId: doc.id }]);
+    });
   });
 
   it("closes the gap among the siblings and leaves other parents alone", async () => {

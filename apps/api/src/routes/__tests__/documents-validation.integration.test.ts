@@ -67,6 +67,22 @@ describe("titles follow the project rules", () => {
     const { api, person, project } = await setup();
     expect((await api.create(person, project.id, {})).statusCode).toBe(400);
   });
+
+  it("refuses a broken emoji (a lone surrogate half) in a new title instead of changing it", async () => {
+    const { raw } = await setup();
+    const response = await raw("POST", '{"title":"broken \\ud83d title"}');
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ errors: [{ source: "body", pointer: "/title" }] });
+    expect(await stored()).toBe(1);
+  });
+
+  it("refuses a broken emoji in a changed title, and the title stays as it was", async () => {
+    const { api, raw, person, project, document } = await setup();
+    const response = await raw("PATCH", '{"title":"broken \\ude00 title"}');
+    expect(response.statusCode).toBe(400);
+    const read = await api.get(person, project.id, document.id);
+    expect(read.json<{ title: string }>().title).toBe(document.title);
+  });
 });
 
 describe("the text of a document", () => {
