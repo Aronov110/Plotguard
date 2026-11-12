@@ -38,6 +38,8 @@ export const aiAnalyses = pgTable(
     /** Set to NULL when the analysed document is deleted; the analysis itself is kept. */
     documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
     kind: text("kind").$type<AiAnalysisKind>().notNull(),
+    /** What the writer asked the ideas to be about (ideas only); `null` for no focus. */
+    focus: text("focus"),
     scope: text("scope").$type<AiAnalysisScope>().notNull(),
     status: text("status").$type<AiAnalysisStatus>().notNull().default("pending"),
     model: text("model").notNull(),
@@ -69,6 +71,10 @@ export const aiAnalyses = pgTable(
       table.createdAt.desc().nullsFirst(),
     ),
     check("ai_analyses_kind_valid", sql`${table.kind} in ('plot_holes', 'ideas')`),
+    check(
+      "ai_analyses_focus_length",
+      sql`${table.focus} is null or char_length(${table.focus}) <= 500`,
+    ),
     check("ai_analyses_scope_valid", sql`${table.scope} in ('document', 'project')`),
     check("ai_analyses_status_valid", sql`${table.status} in ('pending', 'succeeded', 'failed')`),
     check("ai_analyses_model_not_empty", sql`char_length(${table.model}) > 0`),

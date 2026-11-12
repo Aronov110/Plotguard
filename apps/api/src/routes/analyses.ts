@@ -29,8 +29,12 @@ const NO_PROJECT = "There is no such project.";
 const NO_ANALYSIS = "There is no such analysis.";
 const NO_DOCUMENT_OR_PROJECT = "There is no such project, or no such item in it.";
 
-/** The body of a request to start a run is a few short fields. */
-const CREATE_BODY_LIMIT_BYTES = 1024;
+/**
+ * The body of a request to start a run is a few short fields and a focus of at most 500 characters,
+ * which can take 4 bytes each (and 6 as an escape in JSON). 4 KiB covers that with room to spare and
+ * is still far smaller than anything a person could mean to send.
+ */
+const CREATE_BODY_LIMIT_BYTES = 4096;
 
 /** The signed-in person. `requireAuth` has run by now, so a missing id is a bug; fail closed. */
 function ownerOf(request: FastifyRequest): string {
@@ -94,8 +98,10 @@ export async function analysesRoutes(
         tags: ["analyses"],
         summary: "Start an AI run",
         description:
-          "Looks for plot holes in one item (an act with its scenes, or a scene) or in the whole " +
-          "project. The text is sent to Anthropic's Claude API. Answers 202 with the run as " +
+          "Looks for plot holes (`kind` plot_holes) or suggests ideas (`kind` ideas) for one item " +
+          "(an act with its scenes, or a scene) or for the whole project. Ideas can take a `focus`, " +
+          "a sentence of at most 500 characters about what they should be about (400 for a plot-hole " +
+          "scan). The text, and the focus, are sent to Anthropic's Claude API. Answers 202 with the run as " +
           "`pending`; read it again until it is `succeeded` or `failed`. One run at a time per " +
           "person (409), with a limit on runs and tokens per 24 hours (429). Answers 422 when " +
           "there is no text, 413 when the text is longer than one run may send, 503 when the AI " +

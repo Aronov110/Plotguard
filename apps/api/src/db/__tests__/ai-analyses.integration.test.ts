@@ -141,6 +141,43 @@ describe("ai_analyses", () => {
     });
   });
 
+  describe("focus", () => {
+    it("is empty unless one is given", async () => {
+      const { user, project } = await setup();
+      const row = await insertAiAnalysis(handle.db, user.id, project.id, { kind: "ideas" });
+      expect(row.focus).toBeNull();
+    });
+
+    it("holds up to 500 characters, counted as characters and not as bytes", async () => {
+      const { user, project } = await setup();
+      const row = await insertAiAnalysis(handle.db, user.id, project.id, {
+        kind: "ideas",
+        status: "succeeded",
+        focus: "é".repeat(500),
+      });
+      expect(row.focus).toHaveLength(500);
+      await expect(
+        insertAiAnalysis(handle.db, user.id, project.id, {
+          kind: "ideas",
+          status: "succeeded",
+          focus: "\u{1F600}".repeat(500),
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it("refuses more than 500 characters", async () => {
+      const { user, project } = await setup();
+      await expectPgError(
+        insertAiAnalysis(handle.db, user.id, project.id, {
+          kind: "ideas",
+          focus: "a".repeat(501),
+        }),
+        PG_ERRORS.checkViolation,
+        "ai_analyses_focus_length",
+      );
+    });
+  });
+
   describe("ownership", () => {
     it("rejects an analysis whose project belongs to a different user", async () => {
       const { project } = await setup();

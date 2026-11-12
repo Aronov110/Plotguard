@@ -68,8 +68,8 @@ export function registerOpenApi(app: FastifyInstance): void {
         {
           name: "analyses",
           description:
-            "AI runs on one of the signed-in person's projects: a plot-hole scan of an item or " +
-            "of the whole project, made by Claude. Starting a run sends the chosen text to " +
+            "AI runs on one of the signed-in person's projects: a plot-hole scan or a list of ideas, for one item or " +
+            "for the whole project, made by Claude. Starting a run sends the chosen text to " +
             "Anthropic. Every route needs the access token. A project or run of someone else is " +
             "answered with 404, like one that does not exist. A run is `pending` until it is " +
             "`succeeded` or `failed`. Errors are Problem Details: 400 invalid input or cursor, " +

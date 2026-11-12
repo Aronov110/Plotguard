@@ -249,20 +249,20 @@ project, is answered with 404, exactly like one that does not exist. Every answe
 
 ## AI analyses
 
-A plot-hole scan of one item (an act with its scenes, or a scene) or of the whole project, made by
-Claude. The idea generator follows in a later step. All under `/projects/:projectId/analyses`, all
+A plot-hole scan (`kind: plot_holes`) or a list of ideas (`kind: ideas`) for one item (an act with
+its scenes, or a scene) or for the whole project, made by Claude. All under `/projects/:projectId/analyses`, all
 need `Authorization: Bearer <access token>`; the full reference is at `/docs/`. A project or run of
 someone else is answered with 404, exactly like one that does not exist. Every answer is
 `Cache-Control: private, no-store`.
 
-| Route                        | Gives                                                                                                                                |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET …/analyses/estimate`    | What a run would use and cost, what is left of your allowance, and whether runs can start at all                                     |
-| `POST …/analyses`            | **202** and the run as `pending`. Body: `{ "kind": "plot_holes", "scope": "project" }`, or `"scope": "document"` with a `documentId` |
-| `GET …/analyses`             | Your runs on this project, newest first, with cursor paging like the project list                                                    |
-| `GET …/analyses/:id`         | One run: `pending`, or `succeeded` with its `result`, or `failed` with an `errorCode`                                                |
-| `POST …/analyses/:id/cancel` | Stops a run in progress (it ends as `failed`, `canceled`)                                                                            |
-| `DELETE …/analyses/:id`      | 204. Permanent. A run still going is stopped first                                                                                   |
+| Route                        | Gives                                                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET …/analyses/estimate`    | What a run would use and cost, what is left of your allowance, and whether runs can start at all                                                                          |
+| `POST …/analyses`            | **202** and the run as `pending`. Body: `{ "kind": "plot_holes", "scope": "project" }`, or `"scope": "document"` with a `documentId`; `"kind": "ideas"` can add a `focus` |
+| `GET …/analyses`             | Your runs on this project, newest first, with cursor paging like the project list                                                                                         |
+| `GET …/analyses/:id`         | One run: `pending`, or `succeeded` with its `result`, or `failed` with an `errorCode`                                                                                     |
+| `POST …/analyses/:id/cancel` | Stops a run in progress (it ends as `failed`, `canceled`)                                                                                                                 |
+| `DELETE …/analyses/:id`      | 204. Permanent. A run still going is stopped first                                                                                                                        |
 
 - **A run goes on in the background.** `POST` answers at once; the screen asks `GET` every few
   seconds until the run is `succeeded` or `failed`. A run that the server was restarted under is
@@ -282,6 +282,17 @@ someone else is answered with 404, exactly like one that does not exist. Every a
   `Retry-After`), the cap on the bill. A text longer than `AI_MAX_INPUT_TOKENS` is refused up front
   (413) with a hint to choose a smaller part; no text at all is 422. Starting, cancelling and
   deleting runs has a limit of 20 per minute per person, separate from the other counters.
+- **Ideas.** An idea run answers with a summary and at most eight ideas, best first: a title, a kind
+  (`plot_twist`, `scene`, `character`, `conflict`, `dialogue`, `theme`, `other`), a description, why it
+  fits (what the story already has that it builds on), one to three quotes from the text (checked
+  like the quotes of a finding) and the item it could go into (`goesIn`, `null` for the story as a
+  whole). It brainstorms: it does not write the scene. The optional `focus` says what the ideas
+  should be about, up to 500 characters; it is turned into one plain line (line breaks, control and
+  invisible direction characters become spaces or are dropped), stored with the run (`focus`, `null`
+  when none) and sent in the task between two marker lines that say it cannot change the rules. A
+  focus for a plot-hole scan is a 400. Both kinds share the one-run-at-a-time rule and the daily
+  allowance, and the same standing instructions and manuscript, so the prompt cache is reused.
+  The focus is never written to the log.
 - **The cost hint** (`/estimate`) is worked out from the number of characters, with no call to the
   AI service: a range of tokens and of dollars at the configured model's published price. It is a
   rough estimate, not a quote.

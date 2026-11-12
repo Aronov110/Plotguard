@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "../projects/limits.ts";
+import { characters, hasNoNul, isWellFormed, unitCeiling } from "../projects/schemas.ts";
 
 // ---------------------------------------------------------------------------------------------
 // What a person may ask for
 // ---------------------------------------------------------------------------------------------
 
-/** Only the plot-hole finder exists so far; the idea generator joins it in a later step. */
-export const ANALYSIS_KINDS = ["plot_holes"] as const;
+/** The plot-hole finder and the idea generator. */
+export const ANALYSIS_KINDS = ["plot_holes", "ideas"] as const;
 export const ANALYSIS_SCOPES = ["document", "project"] as const;
 export type AnalysisKind = (typeof ANALYSIS_KINDS)[number];
 export type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
@@ -25,6 +26,42 @@ function scopeMatchesDocument(value: { scope: AnalysisScope; documentId?: string
     : value.documentId === undefined;
 }
 
+/** The most characters of a focus: a sentence or two about what the ideas should be about. */
+export const FOCUS_MAX_CHARACTERS = 500;
+
+/** Characters that only disguise text: zero-width spaces, direction marks and overrides. */
+const INVISIBLE = /[\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gu;
+
+/**
+ * The writer's focus as one plain line: line breaks, tabs and other control characters become single
+ * spaces, invisible direction marks are dropped, and the ends are trimmed. One line cannot start a
+ * line of its own in the prompt.
+ */
+export function normalizeFocus(text: string): string {
+  return text
+    .replace(INVISIBLE, "")
+    .replace(/[\s\p{Cc}]+/gu, " ")
+    .trim();
+}
+
+const focus = z
+  .string()
+  .max(unitCeiling(FOCUS_MAX_CHARACTERS), { error: "The focus is too long." })
+  .refine(hasNoNul, { error: "The focus cannot contain a null character." })
+  .refine(isWellFormed, { error: "The focus contains an invalid character." })
+  .transform(normalizeFocus)
+  .refine((text) => characters(text) <= FOCUS_MAX_CHARACTERS, {
+    error: `The focus can be at most ${FOCUS_MAX_CHARACTERS} characters.`,
+  })
+  // A blank focus means no focus, so an empty text and none at all are the same.
+  .transform((text) => (text === "" ? undefined : text))
+  .describe(
+    `What the ideas should be about, up to ${FOCUS_MAX_CHARACTERS} characters, for ideas only. ` +
+      "Line breaks become spaces.",
+  );
+
+const FOCUS_KIND_MESSAGE = "A focus is only for ideas.";
+
 const SCOPE_MESSAGE = "Give a documentId when the scope is document, and none when it is project.";
 
 export const createAnalysisBodySchema = z
@@ -32,8 +69,13 @@ export const createAnalysisBodySchema = z
     kind,
     scope,
     documentId: documentId.optional(),
+    focus: focus.optional(),
   })
-  .refine(scopeMatchesDocument, { error: SCOPE_MESSAGE, path: ["documentId"] });
+  .refine(scopeMatchesDocument, { error: SCOPE_MESSAGE, path: ["documentId"] })
+  .refine((value) => value.focus === undefined || value.kind === "ideas", {
+    error: FOCUS_KIND_MESSAGE,
+    path: ["focus"],
+  });
 
 export const estimateQuerySchema = z
   .strictObject({
@@ -129,6 +171,50 @@ export const plotHoleOutputSchema = z.object({
 
 export type PlotHoleOutput = z.infer<typeof plotHoleOutputSchema>;
 
+export const IDEA_KINDS = [
+  "plot_twist",
+  "scene",
+  "character",
+  "conflict",
+  "dialogue",
+  "theme",
+  "other",
+] as const;
+
+const ideaFromModelSchema = z.object({
+  title: z.string().min(1).max(160).describe("The idea in a few words."),
+  kind: z.enum(IDEA_KINDS),
+  description: z
+    .string()
+    .min(1)
+    .max(2000)
+    .describe(
+      "What the idea is and what it could do for the story. Plain sentences, no scene text.",
+    ),
+  whyItFits: z
+    .string()
+    .min(1)
+    .max(1000)
+    .describe("What the story already has that this idea builds on."),
+  evidence: z.array(evidenceFromModelSchema).min(1).max(3),
+  goesIn: z
+    .string()
+    .describe(
+      "The id of the item this idea could go into, or an empty string when it is for the story as a whole.",
+    ),
+});
+
+/** The answer the model must give for an idea request. */
+export const ideasOutputSchema = z.object({
+  summary: z
+    .string()
+    .max(1200)
+    .describe("Two or three sentences on where the story could go from here."),
+  ideas: z.array(ideaFromModelSchema).max(8),
+});
+
+export type IdeasOutput = z.infer<typeof ideasOutputSchema>;
+
 // ---------------------------------------------------------------------------------------------
 // What is stored and returned
 // ---------------------------------------------------------------------------------------------
@@ -153,6 +239,20 @@ export const plotHoleResultSchema = z.object({
 });
 
 export type PlotHoleResult = z.infer<typeof plotHoleResultSchema>;
+
+const ideaSchema = ideaFromModelSchema.omit({ evidence: true, goesIn: true }).extend({
+  evidence: z.array(evidenceSchema),
+  /** The item the idea could go into, or `null` for the story as a whole (or an unknown item). */
+  goesIn: z.string().nullable(),
+});
+
+export const ideasResultSchema = z.object({
+  summary: z.string(),
+  ideas: z.array(ideaSchema),
+  read: z.object({ items: z.number().int(), characters: z.number().int() }),
+});
+
+export type IdeasResult = z.infer<typeof ideasResultSchema>;
 
 /** Why a run did not finish, as a stable code the web screen words in plain language. */
 export const ANALYSIS_ERROR_CODES = [
@@ -181,22 +281,28 @@ export const ANALYSIS_ERROR_CODES = [
 ] as const;
 export type AnalysisErrorCode = (typeof ANALYSIS_ERROR_CODES)[number];
 
-export const analysisSchema = z.object({
+const analysisBase = z.object({
   id: z.string(),
   projectId: z.string(),
   /** The item the run looked at; `null` for the whole project, or after that item was deleted. */
   documentId: z.string().nullable(),
-  kind: z.enum(ANALYSIS_KINDS),
   scope: z.enum(ANALYSIS_SCOPES),
   status: z.enum(["pending", "succeeded", "failed"]),
   model: z.string(),
   inputTokens: z.number().int(),
   outputTokens: z.number().int(),
-  result: plotHoleResultSchema.nullable(),
+  /** What the writer asked the ideas to be about; `null` for a plot-hole scan or no focus. */
+  focus: z.string().nullable(),
   errorCode: z.enum(ANALYSIS_ERROR_CODES).nullable(),
   createdAt: z.string().describe("UTC, ISO 8601."),
   completedAt: z.string().nullable().describe("UTC, ISO 8601."),
 });
+
+/** A run, with a result that has the shape of its kind. */
+export const analysisSchema = z.discriminatedUnion("kind", [
+  analysisBase.extend({ kind: z.literal("plot_holes"), result: plotHoleResultSchema.nullable() }),
+  analysisBase.extend({ kind: z.literal("ideas"), result: ideasResultSchema.nullable() }),
+]);
 
 export type AnalysisView = z.infer<typeof analysisSchema>;
 
