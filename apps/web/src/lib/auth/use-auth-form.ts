@@ -1,4 +1,10 @@
-import { type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type SubmitEvent as ReactSubmitEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ApiError, NetworkError } from "../api/problem.ts";
 import {
   type AuthFieldName,
@@ -34,7 +40,7 @@ export interface UseAuthForm {
   readonly summaryRef: RefObject<HTMLDivElement | null>;
   /** The message to show under one field, if any. */
   readonly fieldError: (field: AuthFieldName) => string | undefined;
-  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly onSubmit: (event: ReactSubmitEvent<HTMLFormElement>) => void;
 }
 
 /** Reads a text field of a form, or "" if it is missing (or is a file, which these forms have none of). */
@@ -65,7 +71,7 @@ export function useAuthForm<T extends AuthFormValues>(options: UseAuthFormOption
     if (feedback !== undefined) summaryRef.current?.focus();
   }, [feedback]);
 
-  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+  const submit = async (event: ReactSubmitEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (running.current) return;
 

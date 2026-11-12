@@ -1,4 +1,10 @@
-import { type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type SubmitEvent as ReactSubmitEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ApiError, NetworkError } from "../api/problem.ts";
 import { PROJECT_FORMATS } from "../api/projects-api.ts";
 import { useAuth } from "../auth/session.tsx";
@@ -36,7 +42,7 @@ export interface UseProjectForm {
   readonly summaryRef: RefObject<HTMLDivElement | null>;
   /** The message to show under one field, if any. */
   readonly fieldError: (field: ProjectFieldName) => string | undefined;
-  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly onSubmit: (event: ReactSubmitEvent<HTMLFormElement>) => void;
 }
 
 /**
@@ -63,7 +69,7 @@ export function useProjectForm<T>(options: UseProjectFormOptions<T>): UseProject
     if (feedback !== undefined) summaryRef.current?.focus();
   }, [feedback]);
 
-  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+  const submit = async (event: ReactSubmitEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (running.current) return;
 

@@ -1,0 +1,13 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": ["logline", "loglines"],
+  "ignorePaths": [
+    "node_modules",
+    "bun.lock",
+    "**/drizzle/meta/**",
+    "**/test-results/**",
+    "**/playwright-report/**",
+    "**/dist/**"
+  ]
+}

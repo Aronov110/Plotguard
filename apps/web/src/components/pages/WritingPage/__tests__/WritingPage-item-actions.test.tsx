@@ -14,6 +14,12 @@ import { server } from "../../../../test-support/msw-server.ts";
 import { makeProject, problemResponse } from "../../../../test-support/projects-handlers.ts";
 import { renderApp } from "../../../../test-support/render-app.tsx";
 
+/**
+ * Whole-page tests with several steps (or axe, four times): about a second on a quiet machine, but
+ * on a very busy one they can pass the 5-second default, which then says nothing about the app.
+ */
+const HEAVY_TEST_TIMEOUT_MS = 15_000;
+
 const PROJECT = makeProject({ id: "project-1", title: "The Lighthouse" });
 
 const ACT = makeDocument({ title: "Act One", content: "Act one text.", wordCount: 3, position: 0 });
@@ -138,35 +144,39 @@ describe("WritingPage: renaming", () => {
     );
   });
 
-  it("saves text typed before the rename first, and the next text save follows the rename without a conflict", async () => {
-    plant([ACT, { ...STORM, title: "The Tempest" }, CALM, ACT_TWO]);
-    const calls = answerEverySave();
-    const { user } = await openScene(STORM);
+  it(
+    "saves text typed before the rename first, and the next text save follows the rename without a conflict",
+    async () => {
+      plant([ACT, { ...STORM, title: "The Tempest" }, CALM, ACT_TWO]);
+      const calls = answerEverySave();
+      const { user } = await openScene(STORM);
 
-    await user.type(screen.getByRole("textbox", { name: "Text of “The Storm”" }), " More waves.");
-    await user.click(button("Rename"));
-    await user.keyboard("The Tempest{Enter}");
-    await within(outlineNav()).findByRole("link", { name: "The Tempest" });
+      await user.type(screen.getByRole("textbox", { name: "Text of “The Storm”" }), " More waves.");
+      await user.click(button("Rename"));
+      await user.keyboard("The Tempest{Enter}");
+      await within(outlineNav()).findByRole("link", { name: "The Tempest" });
 
-    // The text went first, on version 1; the rename went on the version that save returned.
-    expect(calls.map((call) => call.body)).toEqual([
-      { content: "Waves crash. More waves." },
-      { title: "The Tempest" },
-    ]);
-    expect(calls.map((call) => call.ifMatch)).toEqual(['"1"', '"2"']);
+      // The text went first, on version 1; the rename went on the version that save returned.
+      expect(calls.map((call) => call.body)).toEqual([
+        { content: "Waves crash. More waves." },
+        { title: "The Tempest" },
+      ]);
+      expect(calls.map((call) => call.ifMatch)).toEqual(['"1"', '"2"']);
 
-    // Writing on afterwards starts from the rename's version: no conflict with the writer's own change.
-    const box = screen.getByRole("textbox", { name: "Text of “The Tempest”" });
-    await user.type(box, " Still more.");
-    fireEvent.keyDown(box, { key: "s", ctrlKey: true });
-    await waitFor(() => expect(calls).toHaveLength(3));
-    expect(calls[2]?.ifMatch).toBe('"3"');
-    expect(calls[2]?.body).toEqual({ content: "Waves crash. More waves. Still more." });
-    await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
-    expect(
-      screen.queryByRole("button", { name: "Save my text over theirs" }),
-    ).not.toBeInTheDocument();
-  });
+      // Writing on afterwards starts from the rename's version: no conflict with the writer's own change.
+      const box = screen.getByRole("textbox", { name: "Text of “The Tempest”" });
+      await user.type(box, " Still more.");
+      fireEvent.keyDown(box, { key: "s", ctrlKey: true });
+      await waitFor(() => expect(calls).toHaveLength(3));
+      expect(calls[2]?.ifMatch).toBe('"3"');
+      expect(calls[2]?.body).toEqual({ content: "Waves crash. More waves. Still more." });
+      await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
+      expect(
+        screen.queryByRole("button", { name: "Save my text over theirs" }),
+      ).not.toBeInTheDocument();
+    },
+    HEAVY_TEST_TIMEOUT_MS,
+  );
 
   it("keeps the old title and says why when the title is refused", async () => {
     plant();
@@ -239,21 +249,25 @@ describe("WritingPage: moving", () => {
     expect(button("Move to…")).toHaveFocus();
   });
 
-  it("moves a scene out to the top level", async () => {
-    plant([ACT, STORM, ACT_TWO, { ...CALM, parentId: null, position: 2 }]);
-    const calls = answerEverySave();
-    const { user } = await openScene(CALM);
-    await user.click(button("Move to…"));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Move to" }), "top");
-    await user.click(button("Move"));
-    await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0]?.body).toEqual({ parentId: null });
-    await waitFor(() =>
-      expect(linkTitles()).toEqual(["Act One", "The Storm", "Act Two", "The Calm"]),
-    );
-    // At the top level the scene is its own act now, so Add to the outline offers it.
-    expect(await screen.findByRole("radio", { name: "Inside “The Calm”" })).toBeChecked();
-  });
+  it(
+    "moves a scene out to the top level",
+    async () => {
+      plant([ACT, STORM, ACT_TWO, { ...CALM, parentId: null, position: 2 }]);
+      const calls = answerEverySave();
+      const { user } = await openScene(CALM);
+      await user.click(button("Move to…"));
+      await user.selectOptions(screen.getByRole("combobox", { name: "Move to" }), "top");
+      await user.click(button("Move"));
+      await waitFor(() => expect(calls).toHaveLength(1));
+      expect(calls[0]?.body).toEqual({ parentId: null });
+      await waitFor(() =>
+        expect(linkTitles()).toEqual(["Act One", "The Storm", "Act Two", "The Calm"]),
+      );
+      // At the top level the scene is its own act now, so Add to the outline offers it.
+      expect(await screen.findByRole("radio", { name: "Inside “The Calm”" })).toBeChecked();
+    },
+    HEAVY_TEST_TIMEOUT_MS,
+  );
 });
 
 describe("WritingPage: deleting", () => {
@@ -361,20 +375,24 @@ describe("WritingPage: deleting", () => {
 });
 
 describe("WritingPage: accessibility of the toolbar", () => {
-  it("has no violations with the buttons, the rename form and the delete question", async () => {
-    plant();
-    const { user } = await openScene(STORM);
-    await expectNoPageA11yViolations();
+  it(
+    "has no violations with the buttons, the rename form and the delete question",
+    async () => {
+      plant();
+      const { user } = await openScene(STORM);
+      await expectNoPageA11yViolations();
 
-    await user.click(button("Rename"));
-    await expectNoPageA11yViolations();
-    await user.click(button("Cancel"));
+      await user.click(button("Rename"));
+      await expectNoPageA11yViolations();
+      await user.click(button("Cancel"));
 
-    await user.click(button("Move to…"));
-    await expectNoPageA11yViolations();
-    await user.click(button("Cancel"));
+      await user.click(button("Move to…"));
+      await expectNoPageA11yViolations();
+      await user.click(button("Cancel"));
 
-    await user.click(button("Delete"));
-    await expectNoPageA11yViolations();
-  });
+      await user.click(button("Delete"));
+      await expectNoPageA11yViolations();
+    },
+    HEAVY_TEST_TIMEOUT_MS,
+  );
 });
