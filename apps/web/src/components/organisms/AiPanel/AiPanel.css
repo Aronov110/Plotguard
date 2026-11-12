@@ -1,0 +1,129 @@
+.ai-panel {
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 2px solid var(--color-border);
+}
+
+.ai-panel__heading {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+/* The heading holds one button that opens and closes the panel: the whole bar is the target. */
+.ai-panel__toggle {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: var(--size-target);
+  padding: 0 var(--space-3);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-1);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-panel__toggle:hover {
+  text-decoration: underline;
+}
+
+.ai-panel__body {
+  margin-top: var(--space-3);
+}
+
+.ai-panel__body[hidden] {
+  display: none;
+}
+
+.ai-panel__intro {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.ai-panel__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.ai-panel__problem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 4px solid var(--color-danger);
+  background: var(--color-danger-bg);
+  overflow-wrap: anywhere;
+}
+
+.ai-panel__problem > p {
+  margin: 0;
+}
+
+.ai-panel__progress {
+  margin: 0 0 var(--space-3);
+}
+
+.ai-panel__progress progress {
+  display: block;
+  width: 100%;
+  max-width: 24rem;
+  margin-bottom: var(--space-2);
+  accent-color: var(--color-accent);
+}
+
+.ai-panel__progress p {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.ai-panel__history h3 {
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.ai-panel__empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.ai-panel__runs {
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.ai-panel__run {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ai-panel__run-text {
+  flex: 1 1 14rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-panel__run-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The question to delete takes the whole row under the text and the buttons. */
+.ai-panel__run > fieldset {
+  flex: 1 1 100%;
+}

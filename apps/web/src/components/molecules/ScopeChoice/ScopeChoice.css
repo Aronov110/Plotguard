@@ -1,0 +1,46 @@
+.scope-choice {
+  /* A fieldset has a minimum width of its content by default, which breaks narrow screens. */
+  min-width: 0;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: 0;
+}
+
+.scope-choice__legend {
+  margin-bottom: var(--space-1);
+  padding: 0;
+  font-weight: 600;
+}
+
+.scope-choice__option {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  min-height: var(--size-target);
+  padding: var(--space-1) 0;
+}
+
+/* Bigger than the browser's own circle, so that it is easy to hit (and passes the 24 px minimum). */
+.scope-choice__input {
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+/* The words next to the circle may hold a title the person wrote: a very long one must wrap. */
+.scope-choice__option > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.scope-choice__label {
+  display: block;
+  padding-top: 0.2rem;
+}
+
+.scope-choice__hint {
+  margin: 0;
+  color: var(--color-text-muted);
+}

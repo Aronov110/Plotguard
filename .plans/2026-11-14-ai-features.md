@@ -1,4 +1,4 @@
-Status: approved (2026-11-14); PR 5a built, pending review and merge. Decisions taken as recommended ("a for all"): 1-A the model is
+Status: approved (2026-11-14); PR 5a merged (#24); PR 5b built, pending review and merge. Decisions taken as recommended ("a for all"): 1-A the model is
 `claude-opus-5-5` (about $0.30 a run, set by `AI_MODEL`); 2-A a background run with polling; 3-A limits of
 10 runs and 1,000,000 tokens per person per day and 5,000,000 tokens per day for everyone; 4-A the first
 release offers the open item and the whole project; 5-A the privacy notice is shown with the Run button
@@ -89,10 +89,38 @@ Done as planned, with the additions below. The web app is untouched.
   the database and two simultaneous requests cannot both get through); a `DELETE` and a cancel route;
   the `aiSweepOnStart` and `shutdown` pieces; the OpenAPI tag; README section. I also applied
   migration `0003` to the development database with `bun run db:migrate` (it only adds the index).
-- Not verified here (needs your key and costs a few cents): a real call to Claude. The request shape,
-  the reading of every kind of answer and the error mapping are tested against a fake SDK object; the
-  structured-output schema is built by the SDK's own Zod helper. A live smoke test (a script you run by
-  hand) is still to do, and the first real run will show how good the findings are.
+- Live smoke test (2026-11-12, after the merge, with the owner's key and approval): one real call
+  through the merged adapter on a two-scene story with a planted contradiction. Outcome `ok` in 14 s;
+  the answer matched the schema; the planted hole and one real extra were found; 7 of 7 quotes
+  verified; 396 input, 1,670 cache-written and 1,253 output tokens, about 3 cents (the estimate for
+  that size said $0.09 to $0.33, so it is cautious for tiny texts). Not covered by it: a large
+  manuscript, a second run reading the cache, and a refusal.
 - Known and open: no streaming to the browser (the screen polls); the one-process assumption of the
   start-up sweep; a text over the input limit is refused rather than split; the result quality is
   unmeasured (an eval is a later option); model, effort and limits are config, not code.
+
+## Outcome of PR 5b (the web panel, `feat/ai-panel`)
+
+Done as planned: a collapsible "Plot-hole finder" section under the outline and text (decision taken:
+under the panes, collapsed by default), with a scope choice, the cost hint, the privacy notice as the
+Run button's description, progress with elapsed time, Cancel, results with links into the text, and a
+history with open and delete. No new dependency; the API is unchanged.
+
+- Tests: web 1,901 passed in 101 files (the new ones: 249 in 12 files, passed three runs in a row);
+  9 browser tests (`e2e/ai-panel.e2e.ts`) on Chromium and on WebKit, with axe (contrast and target
+  size on) open, running and with a result. Lint, both typechecks clean. The e2e API now uses the fake
+  model, with two test-only routes (`/__e2e/ai/next`, `/__e2e/ai/release`) that exist only there.
+- Mutation check, 15 breaks, 14 caught: polling after the end; double start; no "trouble" notice; never
+  giving up; a vanished run not noticed; double Cancel; no longer waits after failures; a run going at
+  page load not found again; loading before the panel is opened; no privacy notice; Run enabled for a
+  text that is too long; every quote shown as found; an unencoded id in a link; an inherited name such
+  as `constructor` reaching the wording tables. One survived: removing the "was the project left?"
+  comparison in `start`, which the abort signal already covers (a redundant guard, kept as defence).
+- Found by the tests: the wording tables answered a server code such as `constructor` with a function
+  (fixed with an own-key lookup); my first `useMemo` in the writing page sat after early returns and
+  broke the order of hooks (removed); under Vitest's fake timers every `user.click` hung until a small
+  `jest` stub was added in the panel's test file.
+- One more finding of design: the API allows one pending run per person across all projects, so a 409
+  on start can name a run in another project. The panel looks for it in this project and otherwise
+  says so in words.
+- Open: no live run through the browser against the real model (only the fake); the idea generator (5c).

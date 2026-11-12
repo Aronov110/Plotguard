@@ -305,7 +305,34 @@ someone else is answered with 404, exactly like one that does not exist. Every a
   call; a refusal that remains is a failed run with `refused`.
 - **The fake model.** `buildApp` takes the model call as a dependency (`aiClient`), which only
   test code uses: tests and the browser tests pass a fake that makes no network call and costs
-  nothing. There is no setting that switches the fake on in a running server.
+  nothing. There is no setting that switches the fake on in a running server. The end-to-end API
+  (`e2e-server.ts`) uses it and has two test-only routes, `POST /__e2e/ai/next` and
+  `POST /__e2e/ai/release`, that tell the fake what to answer next or to hold a run until released.
+
+### The panel on the writing screen
+
+Under the outline and the text there is a collapsed "Plot-hole finder" section (a heading with one
+disclosure button). Nothing is loaded until it is first opened.
+
+- **Choosing and running.** The writer picks the open item or the whole project, sees the size, the
+  price range and what is left of the day's allowance (`/estimate`, no AI call), and presses "Run the
+  scan". The privacy notice is in the page next to the button every time and is the button's
+  accessible description. A text that is too long for one scan disables the button and says why.
+- **Watching a run.** The screen asks `GET …/analyses/:id` every 2 seconds (4 seconds after the
+  first 15 asks, slower after answers that did not come, up to 10 seconds). It says so after three
+  failed asks, keeps trying, and gives up after 30 with a hint to reload. The run is not tied to the
+  page: after a reload the panel finds a run that is still `pending` in the history and watches it
+  again. Cancel stops it. A run that is already going in another project (the API allows one per
+  person) is explained, not shown as an error.
+- **Results.** A summary, a count by severity, and one card per finding: severity and kind in words
+  (never only colour), the explanation, each quoted passage marked "Found in your text" or "Not found
+  in your text" (a quote the AI may have invented), a link to the item a passage is in, and a way to
+  fix it. All of it is plain text. A run that did not finish says why in plain words per `errorCode`.
+- **History.** The last ten scans (with "Show older scans"), each openable (the focus moves to its
+  result) and deletable behind a confirmation that keeps the safe answer focused.
+- **Where the code is.** `apps/web/src/lib/api/analyses-api.ts` (the calls),
+  `apps/web/src/lib/analyses/` (the hook, the wording of every error, the cost text) and
+  `apps/web/src/components/organisms/AiPanel/`.
 
 ## Checks
 

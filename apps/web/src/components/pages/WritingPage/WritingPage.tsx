@@ -1,17 +1,28 @@
 import { type ReactElement, useCallback, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { DocumentDetail } from "../../../lib/api/documents-api.ts";
-import { findNode, useOutline } from "../../../lib/documents/use-outline.ts";
+import { findNode, type OutlineNode, useOutline } from "../../../lib/documents/use-outline.ts";
 import { usePageTitle } from "../../../lib/navigation/use-page-title.ts";
 import { useProject } from "../../../lib/projects/use-project.ts";
 import { Button } from "../../atoms/Button/Button.tsx";
 import { PageHeading } from "../../atoms/PageHeading/PageHeading.tsx";
 import { ErrorSummary } from "../../molecules/ErrorSummary/ErrorSummary.tsx";
 import { AddItemForm } from "../../organisms/AddItemForm/AddItemForm.tsx";
+import { AiPanel } from "../../organisms/AiPanel/AiPanel.tsx";
 import { DocumentEditor } from "../../organisms/DocumentEditor/DocumentEditor.tsx";
 import { OutlineNav } from "../../organisms/OutlineNav/OutlineNav.tsx";
 import { AppLayout } from "../../templates/AppLayout/AppLayout.tsx";
 import "./WritingPage.css";
+
+/** The title of every item in the outline, by id. */
+function titlesOf(nodes: readonly OutlineNode[]): ReadonlyMap<string, string> {
+  const titles = new Map<string, string>();
+  for (const node of nodes) {
+    titles.set(node.id, node.title);
+    for (const child of node.children) titles.set(child.id, child.title);
+  }
+  return titles;
+}
 
 /**
  * The writing screen of one project: its outline beside the text of the open item. The open item is
@@ -83,6 +94,8 @@ export function WritingPage(): ReactElement {
 
   const nodes = outline.view.status === "ready" ? outline.view.nodes : [];
   const open = documentId === undefined ? undefined : findNode(nodes, documentId);
+  // Not a hook: this comes after the early returns above, and building the map is cheap.
+  const titles = titlesOf(nodes);
   // A scene goes into the act that is open, or into the act the open scene is in.
   const insideNode = open === undefined ? undefined : (open.parent ?? open.node);
   const inside =
@@ -155,6 +168,11 @@ export function WritingPage(): ReactElement {
         <div className="writing-page__side">{side}</div>
         <div className="writing-page__text">{text}</div>
       </div>
+      <AiPanel
+        projectId={projectId}
+        openItem={open === undefined ? undefined : { id: open.node.id, title: open.node.title }}
+        titles={titles}
+      />
       {/* Always in the page, so that a screen reader is already listening when its text changes. */}
       <p role="status" className="visually-hidden">
         {announcement.text === ""

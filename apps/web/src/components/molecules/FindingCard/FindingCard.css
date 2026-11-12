@@ -1,0 +1,79 @@
+.finding-card {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-1);
+  background: var(--color-surface);
+  list-style: none;
+  /* Everything in a card comes from the AI or the writer: long words must wrap, not widen the page. */
+  overflow-wrap: anywhere;
+}
+
+/* The border helps the eye; the severity is also written out. */
+.finding-card--major {
+  border-color: var(--color-danger);
+}
+
+.finding-card__title {
+  margin: 0 0 var(--space-1);
+  font-size: 1.1rem;
+}
+
+.finding-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.finding-card__severity,
+.finding-card__category {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-1);
+  font-size: 0.9rem;
+}
+
+.finding-card__severity {
+  font-weight: 600;
+}
+
+.finding-card__explanation,
+.finding-card__suggestion {
+  margin: 0 0 var(--space-2);
+}
+
+.finding-card__evidence {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.finding-card__passage {
+  margin: 0 0 var(--space-2);
+}
+
+.finding-card__quote {
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border-left: 4px solid var(--color-border);
+  font-family: var(--font-writing);
+  white-space: pre-wrap;
+}
+
+.finding-card__check,
+.finding-card__where {
+  margin: var(--space-1) 0 0 var(--space-3);
+  font-size: 0.9rem;
+}
+
+.finding-card__check--found {
+  color: var(--color-success);
+}
+
+/* A quote that is not in the text is a warning: a dashed frame tells it apart without colour. */
+.finding-card__check--missing {
+  padding: 0 var(--space-2);
+  border: 2px dashed var(--color-danger);
+  color: var(--color-text);
+}

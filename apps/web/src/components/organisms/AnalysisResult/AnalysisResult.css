@@ -1,0 +1,38 @@
+.analysis-result {
+  margin: var(--space-4) 0;
+  /* The summary and the findings come from the AI: long words must wrap, not widen the page. */
+  overflow-wrap: anywhere;
+}
+
+.analysis-result__top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.analysis-result__top h3 {
+  margin: 0;
+  min-width: 0;
+}
+
+.analysis-result__facts {
+  color: var(--color-text-muted);
+}
+
+.analysis-result__caution {
+  font-weight: 600;
+}
+
+.analysis-result__findings {
+  margin: 0;
+  padding: 0;
+}
+
+.analysis-result__failure {
+  padding: var(--space-2) var(--space-3);
+  border-left: 4px solid var(--color-danger);
+  background: var(--color-danger-bg);
+}
