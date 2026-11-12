@@ -38,10 +38,17 @@ async function renderEditor(
   return { ...view, onWordCount, user: userEvent.setup() };
 }
 
-/** The editor once its text has loaded. */
+/**
+ * The editor once its text has loaded and React has run its effects. The box appears when React
+ * commits, but the effects (the focus, the close-the-tab listener, the subscription to the save
+ * status) run a moment later, and on a busy machine a test would otherwise start before them.
+ */
 async function readyEditor(document: DocumentDetail, options?: Parameters<typeof renderEditor>[1]) {
   const rendered = await renderEditor(document, options);
   const box = await screen.findByRole("textbox");
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   return { ...rendered, box: box as HTMLTextAreaElement };
 }
 
@@ -117,7 +124,7 @@ describe("DocumentEditor: loading", () => {
     const document = makeDocument();
     answerDocument(document);
     const focused = await readyEditor(document, { focusOnReady: true });
-    expect(focused.box).toHaveFocus();
+    await waitFor(() => expect(focused.box).toHaveFocus());
     focused.unmount();
 
     answerDocument(document);
