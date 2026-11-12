@@ -156,6 +156,7 @@ describe("deleting", () => {
     expect(await outlineTitles(t.app, person, project.id)).toEqual([]);
   });
 
+  // The analyses here are finished ones: a person may have only one pending at a time.
   describe("the AI analyses of a deleted document are kept", () => {
     const analysesOf = async (projectId: string) =>
       (await t.handle.db.select().from(aiAnalyses).where(eq(aiAnalyses.projectId, projectId))).map(
@@ -168,6 +169,7 @@ describe("deleting", () => {
       const analysis = await insertAiAnalysis(t.handle.db, person.id, project.id, {
         documentId: doc.id,
         scope: "document",
+        status: "succeeded",
       });
 
       expect((await api.remove(person, project.id, doc.id)).statusCode).toBe(204);
@@ -182,14 +184,17 @@ describe("deleting", () => {
       const ofGone = await insertAiAnalysis(t.handle.db, person.id, project.id, {
         documentId: gone.id,
         scope: "document",
+        status: "succeeded",
       });
       const ofKept = await insertAiAnalysis(t.handle.db, person.id, project.id, {
         documentId: kept.id,
         scope: "document",
+        status: "succeeded",
       });
       const ofProject = await insertAiAnalysis(t.handle.db, person.id, project.id, {
         documentId: null,
         scope: "project",
+        status: "succeeded",
       });
 
       await api.remove(person, project.id, gone.id);
@@ -211,10 +216,12 @@ describe("deleting", () => {
       await insertAiAnalysis(t.handle.db, person.id, project.id, {
         documentId: act.id,
         scope: "document",
+        status: "succeeded",
       });
       await insertAiAnalysis(t.handle.db, person.id, project.id, {
         documentId: scene.id,
         scope: "document",
+        status: "succeeded",
       });
 
       await api.remove(person, project.id, act.id);
@@ -230,6 +237,7 @@ describe("deleting", () => {
       const analysis = await insertAiAnalysis(t.handle.db, person.id, project.id, {
         documentId: doc.id,
         scope: "document",
+        status: "succeeded",
       });
       const stranger = await newPerson(t.app);
 

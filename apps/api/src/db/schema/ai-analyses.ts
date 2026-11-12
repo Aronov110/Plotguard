@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { createdAt, primaryKey, timestamptz } from "./columns.ts";
 import { documents } from "./documents.ts";
 import { projects } from "./projects.ts";
@@ -45,6 +55,11 @@ export const aiAnalyses = pgTable(
       columns: [table.projectId, table.userId],
       foreignColumns: [projects.id, projects.userId],
     }).onDelete("cascade"),
+    // One run at a time per person, enforced by the database: two requests started in the same moment
+    // cannot both get through a check in the application.
+    uniqueIndex("ai_analyses_one_pending_per_user_idx")
+      .on(table.userId)
+      .where(sql`${table.status} = 'pending'`),
     // Without this, every document delete scans the table to null out `document_id`.
     index("ai_analyses_document_id_idx").on(table.documentId),
     // `nullsFirst()` matches the default of `ORDER BY ... DESC`, so no extra Sort step is needed.

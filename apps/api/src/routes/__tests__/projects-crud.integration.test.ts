@@ -385,9 +385,10 @@ describe("DELETE /projects/:id", () => {
       parentId: act.id,
       position: 0,
     });
-    await insertAiAnalysis(t.handle.db, person.id, doomed.id);
+    // Finished analyses: a person may have only one pending at a time.
+    await insertAiAnalysis(t.handle.db, person.id, doomed.id, { status: "succeeded" });
     await insertDocument(t.handle.db, spared.id);
-    await insertAiAnalysis(t.handle.db, person.id, spared.id);
+    await insertAiAnalysis(t.handle.db, person.id, spared.id, { status: "succeeded" });
     await insertDocument(t.handle.db, othersProject.id);
 
     expect((await projectsApi(t.app).remove(person, doomed.id)).statusCode).toBe(204);

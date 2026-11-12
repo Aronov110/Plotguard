@@ -65,6 +65,19 @@ export function registerOpenApi(app: FastifyInstance): void {
             "409 the project is full, 412 out of date, 413 body too large, 415 not JSON, 428 " +
             "`If-Match` missing, 429 too many changes (see `Retry-After`).",
         },
+        {
+          name: "analyses",
+          description:
+            "AI runs on one of the signed-in person's projects: a plot-hole scan of an item or " +
+            "of the whole project, made by Claude. Starting a run sends the chosen text to " +
+            "Anthropic. Every route needs the access token. A project or run of someone else is " +
+            "answered with 404, like one that does not exist. A run is `pending` until it is " +
+            "`succeeded` or `failed`. Errors are Problem Details: 400 invalid input or cursor, " +
+            "401 not signed in, 404 no such project, item or run, 409 a run is already going, " +
+            "413 body or text too large, 415 not JSON, 422 no text to read, 429 too many " +
+            "requests or the daily allowance used (see `Retry-After`), 503 the AI features are " +
+            "not switched on or the day's overall budget is used.",
+        },
       ],
       components: {
         securitySchemes: {

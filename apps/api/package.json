@@ -13,6 +13,7 @@
     "db:migrate": "node --env-file=../../.env src/db/migrate-cli.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0",
     "@fastify/cookie": "11.1.5",
     "@fastify/cors": "11.4.0",
     "@fastify/helmet": "13.2.0",

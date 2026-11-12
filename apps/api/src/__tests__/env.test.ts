@@ -21,6 +21,16 @@ describe("loadEnv", () => {
       CORS_ORIGINS: ["http://127.0.0.1:5173", "http://localhost:5173"],
       RATE_LIMIT_MAX: 100,
       RATE_LIMIT_WINDOW_SECONDS: 60,
+      ANTHROPIC_API_KEY: undefined,
+      AI_ENABLED: true,
+      AI_MODEL: "claude-opus-5-5",
+      AI_EFFORT: "high",
+      AI_MAX_INPUT_TOKENS: 200_000,
+      AI_MAX_OUTPUT_TOKENS: 24_000,
+      AI_USER_DAILY_RUNS: 10,
+      AI_USER_DAILY_TOKENS: 1_000_000,
+      AI_GLOBAL_DAILY_TOKENS: 5_000_000,
+      AI_REQUEST_TIMEOUT_SECONDS: 600,
     });
   });
 
@@ -447,5 +457,108 @@ describe("loadDatabaseEnv", () => {
     expect(() =>
       loadDatabaseEnv({ NODE_ENV: "test", DATABASE_URL: "mysql://u:p@127.0.0.1/db" }),
     ).toThrow(EnvValidationError);
+  });
+});
+
+describe("the AI settings", () => {
+  const env = (extra: Record<string, string> = {}) =>
+    loadEnv({ ...base, DATABASE_URL: validDatabaseUrl, ...extra });
+  const key = "sk-ant-api03-0123456789abcdefghijklmnopqrstuvwxyz";
+
+  describe("ANTHROPIC_API_KEY", () => {
+    it("is optional: without it the AI features are simply off", () => {
+      expect(env().ANTHROPIC_API_KEY).toBeUndefined();
+    });
+
+    it("treats an empty value as no key (a bare line in .env)", () => {
+      expect(env({ ANTHROPIC_API_KEY: "" }).ANTHROPIC_API_KEY).toBeUndefined();
+    });
+
+    it("accepts a key as it is", () => {
+      expect(env({ ANTHROPIC_API_KEY: key }).ANTHROPIC_API_KEY).toBe(key);
+    });
+
+    it.each([
+      ["a key that is too short", "sk-ant-short"],
+      ["a key with a space in it", `${key} x`],
+      [
+        "a key with a line break",
+        `${key}
+`,
+      ],
+    ])("refuses %s, naming the setting and never the value", (_name, value) => {
+      let message = "";
+      try {
+        env({ ANTHROPIC_API_KEY: value });
+      } catch (error) {
+        message = error instanceof Error ? error.message : "";
+      }
+      expect(message).toContain("ANTHROPIC_API_KEY");
+      expect(message).not.toContain(value.trim());
+    });
+  });
+
+  describe("AI_ENABLED", () => {
+    it("is on by default, and can be switched off", () => {
+      expect(env().AI_ENABLED).toBe(true);
+      expect(env({ AI_ENABLED: "false" }).AI_ENABLED).toBe(false);
+      expect(env({ AI_ENABLED: "true" }).AI_ENABLED).toBe(true);
+    });
+
+    it.each(["", "yes", "1", "TRUE", "off"])("refuses %j", (value) => {
+      expect(() => env({ AI_ENABLED: value })).toThrow(EnvValidationError);
+    });
+  });
+
+  describe("AI_MODEL", () => {
+    it("defaults to claude-opus-5-5", () => {
+      expect(env().AI_MODEL).toBe("claude-opus-5-5");
+    });
+
+    it.each(["claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1", "claude-opus-4-8"])(
+      "accepts %s",
+      (model) => {
+        expect(env({ AI_MODEL: model }).AI_MODEL).toBe(model);
+      },
+    );
+
+    it.each([
+      ["a name with a date", "claude-opus-5-5-20260401"],
+      ["a name that is not Claude's", "gpt-5"],
+      ["a name in capitals", "Claude-Opus-5-5"],
+      ["a name with a space", "claude opus"],
+      ["an empty name", ""],
+      ["a name with a slash", "claude-opus/5"],
+    ])("refuses %s", (_name, model) => {
+      expect(() => env({ AI_MODEL: model })).toThrow(EnvValidationError);
+    });
+  });
+
+  describe("AI_EFFORT", () => {
+    it.each(["low", "medium", "high", "xhigh", "max"])("accepts %s", (effort) => {
+      expect(env({ AI_EFFORT: effort }).AI_EFFORT).toBe(effort);
+    });
+
+    it.each(["", "HIGH", "extreme", "0"])("refuses %j", (effort) => {
+      expect(() => env({ AI_EFFORT: effort })).toThrow(EnvValidationError);
+    });
+  });
+
+  describe("the numbers", () => {
+    it.each([
+      ["AI_MAX_INPUT_TOKENS", 1000, 900_000],
+      ["AI_MAX_OUTPUT_TOKENS", 4000, 64_000],
+      ["AI_USER_DAILY_RUNS", 1, 1000],
+      ["AI_USER_DAILY_TOKENS", 10_000, 100_000_000],
+      ["AI_GLOBAL_DAILY_TOKENS", 10_000, 1_000_000_000],
+      ["AI_REQUEST_TIMEOUT_SECONDS", 30, 1800],
+    ])("%s takes whole numbers from %d to %d, and nothing else", (name, low, high) => {
+      expect(env({ [name]: String(low) })[name as "AI_USER_DAILY_RUNS"]).toBe(low);
+      expect(env({ [name]: String(high) })[name as "AI_USER_DAILY_RUNS"]).toBe(high);
+      expect(() => env({ [name]: String(low - 1) })).toThrow(EnvValidationError);
+      expect(() => env({ [name]: String(high + 1) })).toThrow(EnvValidationError);
+      expect(() => env({ [name]: "1.5" })).toThrow(EnvValidationError);
+      expect(() => env({ [name]: "lots" })).toThrow(EnvValidationError);
+    });
   });
 });

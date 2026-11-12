@@ -2,6 +2,10 @@ import type { Writable } from "node:stream";
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
+import { createAnthropicAiClient } from "./ai/anthropic-client.ts";
+import type { AiClient } from "./ai/client.ts";
+import { type AiConfig, aiConfigFromEnv } from "./ai/limits.ts";
+import { type AiService, createAiService } from "./ai/service.ts";
 import { HashGate } from "./auth/hash-gate.ts";
 import { type AuthLimits, DEFAULT_AUTH_LIMITS } from "./auth/limits.ts";
 import { createPasswordHasher, type PasswordHasher } from "./auth/password.ts";
@@ -17,6 +21,7 @@ import { registerOpenApi } from "./plugins/openapi.ts";
 import { registerSecurity } from "./plugins/security.ts";
 import { DEFAULT_PROJECT_LIMITS, type ProjectLimits } from "./projects/limits.ts";
 import { createProjectsService } from "./projects/service.ts";
+import { analysesRoutes } from "./routes/analyses.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { documentsRoutes } from "./routes/documents.ts";
 import { healthRoutes } from "./routes/health.ts";
@@ -57,6 +62,19 @@ export interface AppDependencies {
   readonly documentLimits?: DocumentLimits;
   /** How long a document change waits for the project lock. Tests use a short time. */
   readonly documentLockTimeoutMs?: number;
+  /**
+   * Replaces the model call. Only test code passes this (a fake that makes no network call and costs
+   * nothing); a running server builds the real one from `ANTHROPIC_API_KEY`, and there is no
+   * setting that switches the fake on.
+   */
+  readonly aiClient?: AiClient;
+  /** Replaces the AI limits. Tests use them to reach a limit quickly. */
+  readonly aiConfig?: AiConfig;
+  /**
+   * Fails the runs a restart left `pending` when the app is ready. Only the real server sets it: the
+   * runs live inside one process, so each process that starts may sweep what the last one left.
+   */
+  readonly aiSweepOnStart?: boolean;
 }
 
 /** Builds the Fastify app without listening, so tests can use `app.inject()`. */
@@ -76,7 +94,11 @@ export function buildApp(env: Env, deps: AppDependencies): FastifyInstance {
   app.removeContentTypeParser("text/plain");
 
   app.decorate("db", deps.database.db);
+  // Set below. A run in progress needs the database, so the close stops the runs and waits for them
+  // to be written down first.
+  let ai: AiService | undefined;
   app.addHook("onClose", async () => {
+    await ai?.shutdown();
     await deps.database.close();
   });
 
@@ -139,6 +161,34 @@ export function buildApp(env: Env, deps: AppDependencies): FastifyInstance {
     auth,
     projects: createProjectsService(deps.database.db),
     limits: deps.projectLimits ?? DEFAULT_PROJECT_LIMITS,
+  });
+  const aiConfig = deps.aiConfig ?? aiConfigFromEnv(env);
+  const aiClient =
+    deps.aiClient ??
+    (env.ANTHROPIC_API_KEY === undefined
+      ? undefined
+      : createAnthropicAiClient({ apiKey: env.ANTHROPIC_API_KEY }));
+  const aiService = createAiService(deps.database.db, {
+    client: aiClient,
+    config: aiConfig,
+    enabled: env.AI_ENABLED,
+    onUnexpectedError: (details) => {
+      app.log.error(details, "An AI run failed unexpectedly");
+    },
+  });
+  ai = aiService;
+  if (deps.aiSweepOnStart === true) {
+    app.addHook("onReady", async () => {
+      const swept = await aiService.sweepInterrupted();
+      if (swept > 0)
+        app.log.warn({ swept }, "AI runs left running by a restart were marked failed");
+    });
+  }
+  app.register(analysesRoutes, {
+    prefix: "/projects/:projectId/analyses",
+    auth,
+    ai: aiService,
+    config: aiConfig,
   });
   app.register(documentsRoutes, {
     prefix: "/projects/:projectId/documents",

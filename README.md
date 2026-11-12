@@ -247,6 +247,66 @@ project, is answered with 404, exactly like one that does not exist. Every answe
 - Creating, saving, moving and deleting share a limit of 120 per minute per person, separate from
   the projects limit.
 
+## AI analyses
+
+A plot-hole scan of one item (an act with its scenes, or a scene) or of the whole project, made by
+Claude. The idea generator follows in a later step. All under `/projects/:projectId/analyses`, all
+need `Authorization: Bearer <access token>`; the full reference is at `/docs/`. A project or run of
+someone else is answered with 404, exactly like one that does not exist. Every answer is
+`Cache-Control: private, no-store`.
+
+| Route                        | Gives                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET …/analyses/estimate`    | What a run would use and cost, what is left of your allowance, and whether runs can start at all                                     |
+| `POST …/analyses`            | **202** and the run as `pending`. Body: `{ "kind": "plot_holes", "scope": "project" }`, or `"scope": "document"` with a `documentId` |
+| `GET …/analyses`             | Your runs on this project, newest first, with cursor paging like the project list                                                    |
+| `GET …/analyses/:id`         | One run: `pending`, or `succeeded` with its `result`, or `failed` with an `errorCode`                                                |
+| `POST …/analyses/:id/cancel` | Stops a run in progress (it ends as `failed`, `canceled`)                                                                            |
+| `DELETE …/analyses/:id`      | 204. Permanent. A run still going is stopped first                                                                                   |
+
+- **A run goes on in the background.** `POST` answers at once; the screen asks `GET` every few
+  seconds until the run is `succeeded` or `failed`. A run that the server was restarted under is
+  marked `failed` with `interrupted` when the server starts again (the runs live inside one API
+  process; with a second process a lease would be needed first).
+- **The answer is checked.** The model must answer in a fixed shape (findings with a severity, a
+  category, an explanation, evidence and a suggestion); an answer that does not match is a failed
+  run, never shown. Each quote in the evidence is looked up in the real text, so the result says
+  `verified` for a quote that is really there and `false` for one that may have been invented.
+- **Why a run can fail** (`errorCode`): `refused` (the safety systems declined, also after the
+  automatic retry on another model), `truncated`, `invalid_output`, `rate_limited`, `overloaded`,
+  `timeout`, `too_long`, `not_configured` (the server's key is not working), `canceled`,
+  `interrupted`, `internal`. Tokens are recorded whenever the model got as far as answering.
+- **Limits.** One run at a time per person (409). Per person over the last 24 hours: at most
+  `AI_USER_DAILY_RUNS` runs and `AI_USER_DAILY_TOKENS` tokens (429 with `Retry-After`, counting
+  failed and cancelled runs too). Everybody together: `AI_GLOBAL_DAILY_TOKENS` tokens (503 with
+  `Retry-After`), the cap on the bill. A text longer than `AI_MAX_INPUT_TOKENS` is refused up front
+  (413) with a hint to choose a smaller part; no text at all is 422. Starting, cancelling and
+  deleting runs has a limit of 20 per minute per person, separate from the other counters.
+- **The cost hint** (`/estimate`) is worked out from the number of characters, with no call to the
+  AI service: a range of tokens and of dollars at the configured model's published price. It is a
+  rough estimate, not a quote.
+- **Settings** (in `.env`, see `.env.example`): `ANTHROPIC_API_KEY` (optional: without it the AI
+  features are off and everything else works), `AI_ENABLED` (a kill switch), `AI_MODEL` (the plain
+  model name, `claude-opus-5-5` by default, about $0.30 for a 100-page screenplay; `claude-sonnet-5-5`
+  is about half), `AI_EFFORT`, `AI_MAX_INPUT_TOKENS`, `AI_MAX_OUTPUT_TOKENS`, the three limits above
+  and `AI_REQUEST_TIMEOUT_SECONDS`. The key is only ever read by the server, never logged, and never
+  sent to the web app.
+- **Privacy.** Starting a run sends the text of the chosen items to Anthropic's Claude API. Anthropic's
+  data retention terms for your account apply, and the web screen says so before every run. The
+  manuscript, the prompt and the result are never written to the server's log (a failure is logged
+  with names and codes only).
+- **Prompt injection.** The manuscript is sent as data: every item sits behind a header line made
+  from a hash of the whole text (so nobody can write it into their text in advance), the
+  instructions say that only the task after the manuscript is an instruction, and the model has no
+  tools and no way to do anything, so a text that tries to give it orders can only spoil its own
+  result. The result is validated and shown as text, never as HTML.
+- **Refusals.** A manuscript with dark themes can trip the model's safety systems. The request asks
+  for the server-side fallback, which retries a declined request on another model inside the same
+  call; a refusal that remains is a failed run with `refused`.
+- **The fake model.** `buildApp` takes the model call as a dependency (`aiClient`), which only
+  test code uses: tests and the browser tests pass a fake that makes no network call and costs
+  nothing. There is no setting that switches the fake on in a running server.
+
 ## Checks
 
 ```sh
