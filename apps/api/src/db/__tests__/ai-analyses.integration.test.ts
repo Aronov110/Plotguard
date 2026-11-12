@@ -227,7 +227,8 @@ describe("ai_analyses", () => {
       const { user, project } = await setup();
       const other = await insertProject(handle.db, user.id, { title: "Other" });
       await insertAiAnalysis(handle.db, user.id, project.id);
-      const kept = await insertAiAnalysis(handle.db, user.id, other.id);
+      // Only one analysis per person may be pending, so the second one is a finished one.
+      const kept = await insertAiAnalysis(handle.db, user.id, other.id, { status: "succeeded" });
 
       await handle.db.delete(projects).where(eq(projects.id, project.id));
 
@@ -277,10 +278,96 @@ describe("ai_analyses", () => {
     },
   );
 
+  describe("one pending analysis per person", () => {
+    it("refuses a second pending analysis of the same person, even in another project", async () => {
+      const { user, project } = await setup();
+      const other = await insertProject(handle.db, user.id, { title: "Other" });
+      await insertAiAnalysis(handle.db, user.id, project.id);
+
+      await expectPgError(
+        insertAiAnalysis(handle.db, user.id, other.id),
+        PG_ERRORS.uniqueViolation,
+        "ai_analyses_one_pending_per_user_idx",
+      );
+    });
+
+    it("allows pending analyses of different people at the same time", async () => {
+      const { user, project } = await setup();
+      const other = await insertUser(handle.db);
+      const otherProject = await insertProject(handle.db, other.id);
+      await insertAiAnalysis(handle.db, user.id, project.id);
+
+      await expect(insertAiAnalysis(handle.db, other.id, otherProject.id)).resolves.toMatchObject({
+        status: "pending",
+      });
+    });
+
+    it("allows as many finished analyses as there are, next to one pending", async () => {
+      const { user, project } = await setup();
+      await insertAiAnalysis(handle.db, user.id, project.id, { status: "succeeded" });
+      await insertAiAnalysis(handle.db, user.id, project.id, { status: "failed" });
+      await insertAiAnalysis(handle.db, user.id, project.id, { status: "succeeded" });
+
+      await expect(insertAiAnalysis(handle.db, user.id, project.id)).resolves.toMatchObject({
+        status: "pending",
+      });
+    });
+
+    it("allows a new pending analysis once the pending one has finished or failed", async () => {
+      const { user, project } = await setup();
+      const first = await insertAiAnalysis(handle.db, user.id, project.id);
+      await handle.db
+        .update(aiAnalyses)
+        .set({ status: "failed", errorCode: "interrupted" })
+        .where(eq(aiAnalyses.id, first.id));
+
+      await expect(insertAiAnalysis(handle.db, user.id, project.id)).resolves.toMatchObject({
+        status: "pending",
+      });
+    });
+
+    it("refuses to turn a finished analysis back into a second pending one", async () => {
+      const { user, project } = await setup();
+      await insertAiAnalysis(handle.db, user.id, project.id);
+      const finished = await insertAiAnalysis(handle.db, user.id, project.id, {
+        status: "succeeded",
+      });
+
+      await expectPgError(
+        handle.db
+          .update(aiAnalyses)
+          .set({ status: "pending" })
+          .where(eq(aiAnalyses.id, finished.id)),
+        PG_ERRORS.uniqueViolation,
+        "ai_analyses_one_pending_per_user_idx",
+      );
+    });
+
+    it("lets exactly one of two simultaneous inserts win", async () => {
+      const { user, project } = await setup();
+      const results = await Promise.allSettled([
+        insertAiAnalysis(handle.db, user.id, project.id),
+        insertAiAnalysis(handle.db, user.id, project.id),
+      ]);
+
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    });
+  });
+
   it("can sum token usage per user (the basis for usage limits)", async () => {
     const { user, project } = await setup();
-    await insertAiAnalysis(handle.db, user.id, project.id, { inputTokens: 100, outputTokens: 10 });
-    await insertAiAnalysis(handle.db, user.id, project.id, { inputTokens: 250, outputTokens: 40 });
+    // Finished analyses: a person may have only one pending at a time.
+    await insertAiAnalysis(handle.db, user.id, project.id, {
+      status: "succeeded",
+      inputTokens: 100,
+      outputTokens: 10,
+    });
+    await insertAiAnalysis(handle.db, user.id, project.id, {
+      status: "failed",
+      inputTokens: 250,
+      outputTokens: 40,
+    });
 
     const { rows } = await handle.pool.query<{ input: string; output: string }>(
       `select sum(input_tokens) as input, sum(output_tokens) as output

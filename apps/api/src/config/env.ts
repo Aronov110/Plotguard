@@ -50,6 +50,42 @@ const jwtSecretSchema = z
     message: "JWT_ACCESS_SECRET is too repetitive; generate a random one (see .env.example)",
   });
 
+/**
+ * The key for the Claude API. Optional: without it the AI features are switched off and everything
+ * else works. An empty value (a bare `ANTHROPIC_API_KEY=` line in .env) counts as no key. It is only
+ * ever read here, and never logged.
+ */
+const anthropicApiKeySchema = z
+  .string()
+  .optional()
+  .transform((value) => (value === undefined || value === "" ? undefined : value))
+  .pipe(
+    z
+      .string()
+      .min(20, "ANTHROPIC_API_KEY looks too short to be a real key")
+      .regex(/^\S+$/, "ANTHROPIC_API_KEY must not contain whitespace")
+      .optional(),
+  );
+
+/**
+ * A model name as the API wants it: `claude-opus-5-5`. A date suffix (`-20260101`) is refused on
+ * purpose: the names in use have none, and a copied-in snapshot name would stop working silently.
+ */
+const aiModelSchema = z
+  .string()
+  .regex(
+    /^claude-[a-z0-9]+(-[a-z0-9]+)*$/,
+    "AI_MODEL must be a Claude model name such as claude-opus-5-5",
+  )
+  .refine((value) => !/-\d{8}$/.test(value), {
+    message: "AI_MODEL must not end in a date; use the plain model name",
+  });
+
+const aiEnabledSchema = z
+  .enum(["true", "false"], { error: "AI_ENABLED must be true or false" })
+  .default("true")
+  .transform((value) => value === "true");
+
 const envSchema = z
   .object({
     NODE_ENV: nodeEnvSchema,
@@ -69,6 +105,28 @@ const envSchema = z
     CORS_ORIGINS: z.string().optional(),
     RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100_000).default(100),
     RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86_400).default(60),
+    // The AI features (plot-hole finder, idea generator). Off when there is no key.
+    ANTHROPIC_API_KEY: anthropicApiKeySchema,
+    /** A kill switch: `false` switches the AI features off even when a key is set. */
+    AI_ENABLED: aiEnabledSchema,
+    AI_MODEL: aiModelSchema.default("claude-opus-5-5"),
+    AI_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("high"),
+    /** The longest text one run may send, in tokens. */
+    AI_MAX_INPUT_TOKENS: z.coerce.number().int().min(1000).max(900_000).default(200_000),
+    /** The most the model may write in one run, thinking included, in tokens. */
+    AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(4000).max(64_000).default(24_000),
+    /** One person's limits over the last 24 hours. */
+    AI_USER_DAILY_RUNS: z.coerce.number().int().min(1).max(1000).default(10),
+    AI_USER_DAILY_TOKENS: z.coerce.number().int().min(10_000).max(100_000_000).default(1_000_000),
+    /** Everybody's tokens over the last 24 hours together: the cap on the bill. */
+    AI_GLOBAL_DAILY_TOKENS: z.coerce
+      .number()
+      .int()
+      .min(10_000)
+      .max(1_000_000_000)
+      .default(5_000_000),
+    /** How long one run may take before it is given up. */
+    AI_REQUEST_TIMEOUT_SECONDS: z.coerce.number().int().min(30).max(1800).default(600),
   })
   .transform((raw, ctx) => {
     const { CORS_ORIGINS: rawOrigins, ...rest } = raw;

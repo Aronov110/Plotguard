@@ -1,5 +1,7 @@
 import argon2 from "argon2";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
+import type { AiClient } from "../ai/client.ts";
+import type { AiConfig } from "../ai/limits.ts";
 import { buildApp } from "../app.ts";
 import type { AuthLimits } from "../auth/limits.ts";
 import { createPasswordHasher } from "../auth/password.ts";
@@ -41,6 +43,11 @@ export interface AuthTestOptions {
   readonly documentLimits?: DocumentLimits;
   /** How long a document change waits for the project lock. Short, so a test need not wait. */
   readonly documentLockTimeoutMs?: number;
+  /** The model call: a fake. Without one the AI features are off (no key in the test environment). */
+  readonly aiClient?: AiClient;
+  readonly aiConfig?: AiConfig;
+  /** Fails the runs left `pending`, as the real server does when it starts. */
+  readonly aiSweepOnStart?: boolean;
 }
 
 /**
@@ -59,6 +66,9 @@ export async function buildAuthTestApp(options: AuthTestOptions = {}): Promise<A
     authLimits: { ...NO_LIMITS, ...options.limits },
     ...(options.projectLimits === undefined ? {} : { projectLimits: options.projectLimits }),
     ...(options.documentLimits === undefined ? {} : { documentLimits: options.documentLimits }),
+    ...(options.aiClient === undefined ? {} : { aiClient: options.aiClient }),
+    ...(options.aiConfig === undefined ? {} : { aiConfig: options.aiConfig }),
+    ...(options.aiSweepOnStart === undefined ? {} : { aiSweepOnStart: options.aiSweepOnStart }),
     ...(options.documentLockTimeoutMs === undefined
       ? {}
       : { documentLockTimeoutMs: options.documentLockTimeoutMs }),
