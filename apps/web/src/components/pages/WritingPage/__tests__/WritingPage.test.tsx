@@ -58,7 +58,8 @@ describe("WritingPage: the frame", () => {
     plant();
     await openProject();
     expect(screen.getByRole("heading", { level: 1, name: "The Lighthouse" })).toBeVisible();
-    expect(document.title).toBe("The Lighthouse – Plotpal");
+    // The title is set by an effect, which runs a moment after the heading appears.
+    await waitFor(() => expect(document.title).toBe("The Lighthouse – Plotpal"));
     expect(screen.getByRole("link", { name: "Back to your projects" })).toHaveAttribute(
       "href",
       "/app",
