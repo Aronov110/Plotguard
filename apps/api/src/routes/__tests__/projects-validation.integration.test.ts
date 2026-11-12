@@ -308,6 +308,68 @@ describe("text the database cannot store", () => {
   });
 });
 
+describe("a broken emoji (a lone surrogate half) is refused, not silently changed", () => {
+  it("answers 400 for one in the title of a new project, and stores nothing", async () => {
+    const person = await newPerson(t.app);
+    const before = t.logs.lines.length;
+    const response = await sendRaw(
+      person,
+      "POST",
+      "/projects",
+      '{"title":"broken \\ud83d title","format":"prose"}',
+      "application/json",
+    );
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ errors: [{ source: "body", pointer: "/title" }] });
+    expect(await projectCount(person)).toBe(0);
+    expect(errorLinesSince(before)).toEqual([]);
+  });
+
+  it("answers 400 for one in the logline of a new project, and stores nothing", async () => {
+    const person = await newPerson(t.app);
+    const response = await sendRaw(
+      person,
+      "POST",
+      "/projects",
+      '{"title":"T","format":"prose","logline":"broken \\ude00 logline"}',
+      "application/json",
+    );
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ errors: [{ source: "body", pointer: "/logline" }] });
+    expect(await projectCount(person)).toBe(0);
+  });
+
+  it("answers 400 for one in a changed title, and leaves the project as it was", async () => {
+    const person = await newPerson(t.app);
+    const project = await createdProject(t.app, person);
+    const response = await sendRaw(
+      person,
+      "PATCH",
+      `/projects/${project.id}`,
+      '{"title":"broken \\ud83d title"}',
+      "application/json",
+    );
+    expect(response.statusCode).toBe(400);
+    const read = await projectsApi(t.app).get(person, project.id);
+    expect(read.json<ProjectJson>().title).toBe(project.title);
+  });
+
+  it("still accepts a whole emoji, and stores it exactly", async () => {
+    const person = await newPerson(t.app);
+    const response = await sendRaw(
+      person,
+      "POST",
+      "/projects",
+      '{"title":"Lighthouse \\ud83d\\ude00","format":"prose","logline":"\\ud83d\\ude00"}',
+      "application/json",
+    );
+    expect(response.statusCode).toBe(201);
+    const stored = response.json<ProjectJson>();
+    expect(stored.title).toBe("Lighthouse 😀");
+    expect(stored.logline).toBe("😀");
+  });
+});
+
 describe("an id that is not an id", () => {
   it.each([
     ["GET", (person: Person, id: string) => projectsApi(t.app).get(person, id)],

@@ -1,4 +1,4 @@
-Status: approved (2026-11-13), PR 1 of 3 done, pending review and merge. Decisions taken as recommended
+Status: approved (2026-11-13), PRs 1 and 2 of 3 done (PR 2 pending review and merge). Decisions taken as recommended
 ("a for all"): 1-A three PRs; 2-A a `cspell.json` for the spell checker; 3-A the lock timeout is 5
 seconds; 4-A the three heavy page tests get a 15-second timeout.
 
@@ -64,3 +64,16 @@ PR 1: done as planned. Lint, typecheck and `bun audit` clean; web unit 1652 pass
 (unchanged, as only types, a config file and two test timeouts changed). `FormEvent` no longer appears
 anywhere in `apps/web/src`. The spell checker itself was not run (it is an editor extension), so the
 "logline" hint going away is not verified here. PRs 2 and 3 are still to do.
+
+PR 2: done as planned. Lint, typecheck and `bun audit` clean; API unit 930 -> 941 (11 new), API integration
+776 passed; web untouched. Titles and loglines (and document titles, which share the rule) now refuse a
+lone surrogate with 400 ("The title contains an invalid character."); the five new route tests fail
+against the old schema and pass with the fix; a whole emoji is still accepted and stored exactly.
+`routes/projects.ts` uses the shared `createWriteLimit` (27 lines removed, same counter name; the
+project limits, CRUD and access tests pass unchanged). New integration tests (in
+`documents-crud.integration.test.ts`): deleting a document through the API keeps its analyses with
+`document_id` NULL, leaves other documents' and whole-project analyses alone, unlinks the analyses of an
+act and of its scenes, and keeps the analysis when the delete is refused. README: a line about titles and
+loglines. A whole-suite browser run on `main` (before PR 2): 382 passed, 2 skipped, 2 failed; the two
+(WebKit, the two-tab tests of 4d-2) were 30-second timeouts while other heavy jobs ran on the same
+machine, and pass 3 of 3 when run alone in both browsers.

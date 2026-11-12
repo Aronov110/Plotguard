@@ -1,16 +1,9 @@
-import type { CreateRateLimitOptions } from "@fastify/rate-limit";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { createRequireAuth } from "../auth/require-auth.ts";
 import type { AuthService } from "../auth/service.ts";
-import {
-  NotFoundError,
-  RateLimitError,
-  UnauthorizedError,
-  ValidationError,
-} from "../errors/app-error.ts";
-import { RATE_LIMIT_CACHE_SIZE } from "../plugins/security.ts";
+import { NotFoundError, UnauthorizedError, ValidationError } from "../errors/app-error.ts";
 import {
   DEFAULT_PAGE_SIZE,
   PROJECT_BODY_LIMIT_BYTES,
@@ -25,6 +18,7 @@ import {
   projectSchema,
 } from "../projects/schemas.ts";
 import { InvalidCursorError, type ProjectsService } from "../projects/service.ts";
+import { createWriteLimit } from "./write-limit.ts";
 
 export interface ProjectsRoutesOptions {
   readonly auth: AuthService;
@@ -58,25 +52,8 @@ export async function projectsRoutes(
     reply.header("cache-control", "private, no-store");
   });
 
-  // One counter per person for everything that changes projects. Called by hand, after the person
-  // is known, because the per-address limiter runs before the login check and knows only addresses.
-  // `cache` (how many people the counter remembers) is honoured by the plugin but missing from its
-  // type for this call, so the options are built apart from the call. Left at its default of 5,000,
-  // junk accounts could push a victim's counter out and reset it (see `rule` in routes/auth.ts).
-  const writeLimit: CreateRateLimitOptions & { readonly cache: number } = {
-    max: limits.writes.max,
-    timeWindow: limits.writes.windowSeconds * 1000,
-    cache: RATE_LIMIT_CACHE_SIZE,
-    keyGenerator: (request: FastifyRequest) => `projects-write:${request.userId ?? request.ip}`,
-  };
-  const writeCounter = app.createRateLimit(writeLimit);
-
-  async function limitWrites(request: FastifyRequest): Promise<void> {
-    const state = await writeCounter(request);
-    // `isAllowed` is true only for allow-listed callers (there are none); a counted request always
-    // has it false, and `isExceeded` says whether this one went past the maximum.
-    if (!state.isAllowed && state.isExceeded) throw new RateLimitError(state.ttlInSeconds);
-  }
+  // One counter per person for everything that changes projects (the same helper the documents use).
+  const limitWrites = createWriteLimit(app, "projects-write", limits.writes);
 
   // `preValidation`, so that a request without a valid token gets 401 whatever its body or address
   // looks like, and is never told what is wrong with it.
