@@ -2,8 +2,8 @@ import type { APIRequestContext } from "@playwright/test";
 import { API_ORIGIN, WEB_ORIGIN } from "./targets.ts";
 import type { TestUser } from "./users.ts";
 
-async function post(request: APIRequestContext, path: string): Promise<void> {
-  const response = await request.post(`${API_ORIGIN}${path}`);
+async function post(request: APIRequestContext, path: string, data?: unknown): Promise<void> {
+  const response = await request.post(`${API_ORIGIN}${path}`, data === undefined ? {} : { data });
   if (!response.ok()) {
     throw new Error(`The end-to-end API refused ${path} (status ${response.status()}).`);
   }
@@ -17,6 +17,22 @@ export function holdNextLogoutReply(request: APIRequestContext): Promise<void> {
 /** Lets a held logout reply go. Safe to call when nothing is held. */
 export function releaseLogoutReply(request: APIRequestContext): Promise<void> {
   return post(request, "/__e2e/release-logout-reply");
+}
+
+/**
+ * Tells the fake AI model what to do with the next run: answer, refuse, be cut off, or wait until
+ * {@link releaseAi}. The fake exists only in the end-to-end API, so no real model is ever called.
+ */
+export function aiNext(
+  request: APIRequestContext,
+  kind: "ok" | "refused" | "truncated" | "hold",
+): Promise<void> {
+  return post(request, "/__e2e/ai/next", { kind });
+}
+
+/** Lets a held AI run go on. Safe to call when nothing is held. */
+export function releaseAi(request: APIRequestContext): Promise<void> {
+  return post(request, "/__e2e/ai/release");
 }
 
 /**
