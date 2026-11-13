@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Nothing here needs more than reading the code. No secrets are used, so a pull request from a fork
+# runs with the same rights as one from this repository: none.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the older run. Runs on main are never cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The database of each job's own container (see `services`). The password is not a secret: the
+  # container exists only for this run and cannot be reached from outside the runner. Never reuse it.
+  # The tests wipe this database; its name must end in _test (the code refuses any other).
+  TEST_DATABASE_URL: postgres://plotpal:ci-only-throwaway-password@127.0.0.1:5432/plotpal_test
+
+jobs:
+  check:
+    name: Lint, types and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+
+  integration:
+    name: Integration tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      db:
+        image: postgres:18.6-alpine
+        # The workflow's own `env` is not available here, so the values are written out again.
+        env:
+          POSTGRES_USER: plotpal
+          POSTGRES_PASSWORD: ci-only-throwaway-password
+          POSTGRES_DB: plotpal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U plotpal -d plotpal"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: bun run test:integration
+
+  e2e:
+    name: Browser tests (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # One browser failing must not hide what the other one says.
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    services:
+      db:
+        image: postgres:18.6-alpine
+        # The workflow's own `env` is not available here, so the values are written out again.
+        env:
+          POSTGRES_USER: plotpal
+          POSTGRES_PASSWORD: ci-only-throwaway-password
+          POSTGRES_DB: plotpal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U plotpal -d plotpal"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      NODE_ENV: development
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+
+      # A signing secret made for this run only: it is masked in the logs and exists nowhere else.
+      - name: Make a throwaway signing secret
+        run: |
+          secret="$(openssl rand -base64 48 | tr -d '\n')"
+          echo "::add-mask::${secret}"
+          echo "JWT_ACCESS_SECRET=${secret}" >> "${GITHUB_ENV}"
+
+      - name: Cache the browser
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('bun.lock') }}
+
+      - name: Install the browser and what it needs from the system
+        working-directory: apps/web
+        run: bunx playwright install --with-deps "${{ matrix.browser }}"
+
+      - name: Run the browser tests
+        working-directory: apps/web
+        run: bunx playwright test --project="${{ matrix.browser }}"
+
+      # Reports can hold typed test passwords and cookies of throwaway accounts: only on failure,
+      # and only for a week.
+      - name: Keep the report of a failed run
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # The one name to require before merging. It passes only when every job it waits for passed:
+  # a failed, cancelled or skipped job fails it too. The browser tests are not in it yet; add
+  # `e2e` to `needs` once the known WebKit flakes are fixed.
+  ci:
+    name: CI
+    if: ${{ always() }}
+    needs: [check, integration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [ "${result}" != "success" ]; then
+              echo "A job did not succeed."
+              exit 1
+            fi
+          done
