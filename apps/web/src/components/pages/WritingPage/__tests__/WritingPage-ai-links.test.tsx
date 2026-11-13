@@ -61,7 +61,7 @@ async function openScanWithLinks(documentId: string) {
     signedIn: true,
   });
   await screen.findByRole("heading", { level: 1, name: "The Lighthouse" });
-  await view.user.click(await screen.findByRole("button", { name: /Plot-hole finder/ }));
+  await view.user.click(await screen.findByRole("button", { name: /AI assistant/ }));
   await view.user.click(await screen.findByRole("button", { name: /^Open the scan of/ }));
   const findings = await screen.findByRole("list", { name: "Findings" });
   return { ...view, findings };

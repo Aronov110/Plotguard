@@ -1,11 +1,11 @@
 import type { ReactElement } from "react";
-import { Link } from "react-router";
 import {
   categoryLabel,
   severityLabel,
   severityWord,
 } from "../../../lib/analyses/analysis-feedback.ts";
 import type { Finding } from "../../../lib/api/analyses-api.ts";
+import { EvidenceList } from "../EvidenceList/EvidenceList.tsx";
 import "./FindingCard.css";
 
 export interface FindingCardProps {
@@ -37,43 +37,12 @@ export function FindingCard({ finding, titles, onOpenItem }: FindingCardProps): 
       </p>
       <p className="finding-card__explanation">{finding.explanation}</p>
 
-      <ul className="finding-card__evidence" aria-label="Passages that show it">
-        {finding.evidence.map((evidence, index) => {
-          const itemId = evidence.documentId;
-          const title = itemId === null ? undefined : titles.get(itemId);
-          return (
-            // The AI may quote the same passage twice, so the position is part of the key.
-            // biome-ignore lint/suspicious/noArrayIndexKey: the list never changes after it is shown
-            <li key={`${index}-${evidence.documentId ?? "none"}`} className="finding-card__passage">
-              <blockquote className="finding-card__quote">{evidence.quote}</blockquote>
-              <p
-                className={
-                  evidence.verified
-                    ? "finding-card__check finding-card__check--found"
-                    : "finding-card__check finding-card__check--missing"
-                }
-              >
-                {evidence.verified
-                  ? "Found in your text."
-                  : "Not found in your text. The AI may have invented or changed it."}
-              </p>
-              {itemId !== null && title !== undefined ? (
-                <p className="finding-card__where">
-                  In{" "}
-                  <Link
-                    to={{ search: `?document=${encodeURIComponent(itemId)}` }}
-                    onClick={() => {
-                      onOpenItem(itemId);
-                    }}
-                  >
-                    {title}
-                  </Link>
-                </p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      <EvidenceList
+        evidence={finding.evidence}
+        titles={titles}
+        label="Passages that show it"
+        onOpenItem={onOpenItem}
+      />
 
       {finding.suggestion === "" ? null : (
         <p className="finding-card__suggestion">

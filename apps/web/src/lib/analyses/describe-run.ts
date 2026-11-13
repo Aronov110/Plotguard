@@ -1,4 +1,4 @@
-import type { Analysis, Finding } from "../api/analyses-api.ts";
+import type { Analysis, AnalysisKind, Finding, Idea } from "../api/analyses-api.ts";
 
 /** When a run was started, as a short date and time in the reader's own zone: "12 Nov 2026, 10:00". */
 export function formatRunTime(iso: string, locale?: string, timeZone?: string): string | undefined {
@@ -25,6 +25,17 @@ export function describeScope(analysis: Analysis, titles: ReadonlyMap<string, st
   return title === undefined ? "an item that has since been deleted" : `“${title}”`;
 }
 
+/** The kind of a run for the history list: "Plot holes" or "Ideas". */
+export function kindWord(kind: AnalysisKind): string {
+  return kind === "ideas" ? "Ideas" : "Plot holes";
+}
+
+/** How many ideas, as a sentence: "3 ideas." */
+export function countIdeas(ideas: readonly Idea[]): string {
+  if (ideas.length === 0) return "No ideas.";
+  return `${ideas.length} ${ideas.length === 1 ? "idea" : "ideas"}.`;
+}
+
 /** How many findings of each severity, as a sentence: "3 findings: 1 major, 2 minor." */
 export function countFindings(findings: readonly Finding[]): string {
   if (findings.length === 0) return "No findings.";
@@ -41,6 +52,10 @@ export function countFindings(findings: readonly Finding[]): string {
 export function statusWord(analysis: Analysis): string {
   if (analysis.status === "pending") return "running";
   if (analysis.status === "succeeded") {
+    if (analysis.kind === "ideas") {
+      const count = analysis.result?.ideas.length ?? 0;
+      return count === 0 ? "no ideas" : `${count} ${count === 1 ? "idea" : "ideas"}`;
+    }
     const count = analysis.result?.findings.length ?? 0;
     return count === 0 ? "no findings" : `${count} ${count === 1 ? "finding" : "findings"}`;
   }

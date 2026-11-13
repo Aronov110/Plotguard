@@ -10,6 +10,9 @@ import {
   makeAnalysis,
   makeEstimate,
   makeFinding,
+  makeIdea,
+  makeIdeasAnalysis,
+  makeIdeasSucceeded,
   makeSucceeded,
   page,
 } from "../../../test-support/analyses-handlers.ts";
@@ -42,6 +45,16 @@ describe("analysesApi.estimate", () => {
     await analysesApi.estimate("project-1", ITEM);
     expect(Object.fromEntries(calls[0]?.url.searchParams ?? [])).toEqual({
       kind: "plot_holes",
+      scope: "document",
+      documentId: ITEM.documentId,
+    });
+  });
+
+  it("asks about ideas when told to", async () => {
+    const calls = answerEstimate(makeEstimate());
+    await analysesApi.estimate("project-1", ITEM, { kind: "ideas" });
+    expect(Object.fromEntries(calls[0]?.url.searchParams ?? [])).toEqual({
+      kind: "ideas",
       scope: "document",
       documentId: ITEM.documentId,
     });
@@ -101,6 +114,53 @@ describe("analysesApi.start", () => {
     });
   });
 
+  it("posts the kind ideas, with no focus key when there is none", async () => {
+    const calls = answerStart(makeIdeasAnalysis());
+    const run = await analysesApi.start("project-1", WHOLE, { kind: "ideas" });
+    expect(run.kind).toBe("ideas");
+    expect(calls[0]?.body).toEqual({ kind: "ideas", scope: "project" });
+  });
+
+  it("posts the focus for ideas on one item", async () => {
+    const calls = answerStart(makeIdeasAnalysis({ focus: "a stronger ending" }));
+    await analysesApi.start("project-1", ITEM, { kind: "ideas", focus: "a stronger ending" });
+    expect(calls[0]?.body).toEqual({
+      kind: "ideas",
+      scope: "document",
+      documentId: ITEM.documentId,
+      focus: "a stronger ending",
+    });
+  });
+
+  it("leaves a blank focus out instead of sending it empty", async () => {
+    const calls = answerStart(makeIdeasAnalysis());
+    await analysesApi.start("project-1", WHOLE, { kind: "ideas", focus: "" });
+    expect(calls[0]?.body).toEqual({ kind: "ideas", scope: "project" });
+  });
+
+  it("sends the focus as data, so that nothing in it changes the request", async () => {
+    const calls = answerStart(makeIdeasAnalysis());
+    const odd = 'quote " and \\ and \n and {"kind":"plot_holes"}';
+    await analysesApi.start("p", WHOLE, { kind: "ideas", focus: odd });
+    expect(calls[0]?.body).toEqual({ kind: "ideas", scope: "project", focus: odd });
+  });
+
+  it("never sends a focus with a plot-hole scan, even when one is passed in by mistake", async () => {
+    const calls = answerStart(makeAnalysis());
+    // The type forbids this; a caller that gets round the type must still not send it.
+    const options = { kind: "plot_holes", focus: "x" } as unknown as { kind: "plot_holes" };
+    await analysesApi.start("p", WHOLE, options);
+    expect(calls[0]?.body).toEqual({ kind: "plot_holes", scope: "project" });
+  });
+
+  it("passes on the server's refusal of a focus that is too long (400)", async () => {
+    answerStart(() => problemResponse(400, "validation-error"));
+    const failure = await analysesApi
+      .start("p", WHOLE, { kind: "ideas", focus: "x" })
+      .catch((error: unknown) => error);
+    expect(failure).toMatchObject({ status: 400 });
+  });
+
   it.each([
     [409, "run-in-progress"],
     [413, "manuscript-too-large"],
@@ -153,7 +213,8 @@ describe("analysesApi.get", () => {
   it("accepts a kind of problem it has no wording for", async () => {
     const run = makeSucceeded([makeFinding({ category: "a_new_category" })]);
     answerRun(run);
-    expect((await analysesApi.get("p", run.id)).result?.findings[0]?.category).toBe(
+    const got = await analysesApi.get("p", run.id);
+    expect(got.kind === "plot_holes" ? got.result?.findings[0]?.category : undefined).toBe(
       "a_new_category",
     );
   });
@@ -185,6 +246,77 @@ describe("analysesApi.get", () => {
     const pending = analysesApi.get("p", "x", { signal: controller.signal });
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+describe("analysesApi, a run of ideas", () => {
+  it("reads a finished idea run with its ideas, focus and where each goes", async () => {
+    const run = makeIdeasSucceeded(
+      [makeIdea({ title: "The stranger returns", kind: "plot_twist", goesIn: null })],
+      { focus: "who the stranger was" },
+    );
+    answerRun(run);
+    const got = await analysesApi.get("p", run.id);
+    expect(got).toEqual(run);
+    expect(got.focus).toBe("who the stranger was");
+    expect(got.kind === "ideas" ? got.result?.ideas[0]?.goesIn : "x").toBeNull();
+  });
+
+  it("accepts an idea kind it has no wording for", async () => {
+    const run = makeIdeasSucceeded([makeIdea({ kind: "a_new_kind" })]);
+    answerRun(run);
+    const got = await analysesApi.get("p", run.id);
+    expect(got.kind === "ideas" ? got.result?.ideas[0]?.kind : undefined).toBe("a_new_kind");
+  });
+
+  it("reads a page with both kinds of run", async () => {
+    const mixed = [makeAnalysis(), makeIdeasAnalysis(), makeIdeasSucceeded([makeIdea()])];
+    answerRunList(page(mixed));
+    const got = await analysesApi.list("p");
+    expect(got.items.map((item) => item.kind)).toEqual(["plot_holes", "ideas", "ideas"]);
+  });
+
+  it("refuses a plot-hole result under the kind ideas", async () => {
+    const wrong = { ...makeSucceeded([makeFinding()]), kind: "ideas" };
+    answerRun(() => HttpResponse.json(wrong));
+    await expect(analysesApi.get("p", "x")).rejects.toBeInstanceOf(ResponseShapeError);
+  });
+
+  it("refuses an ideas result under the kind plot_holes", async () => {
+    const wrong = { ...makeIdeasSucceeded([makeIdea()]), kind: "plot_holes" };
+    answerRun(() => HttpResponse.json(wrong));
+    await expect(analysesApi.get("p", "x")).rejects.toBeInstanceOf(ResponseShapeError);
+  });
+
+  it("refuses a kind it does not know", async () => {
+    answerRun(() => HttpResponse.json({ ...makeAnalysis(), kind: "summary" }));
+    await expect(analysesApi.get("p", "x")).rejects.toBeInstanceOf(ResponseShapeError);
+  });
+
+  it("refuses a run that has no focus key at all", async () => {
+    const { focus: _focus, ...without } = makeIdeasAnalysis();
+    answerRun(() => HttpResponse.json(without));
+    await expect(analysesApi.get("p", "x")).rejects.toBeInstanceOf(ResponseShapeError);
+  });
+
+  it("refuses an idea without a goesIn", async () => {
+    const run = makeIdeasSucceeded([makeIdea()]);
+    const broken = structuredClone(run) as unknown as {
+      result: { ideas: Record<string, unknown>[] };
+    };
+    delete broken.result.ideas[0]?.goesIn;
+    answerRun(() => HttpResponse.json(broken));
+    await expect(analysesApi.get("p", "x")).rejects.toBeInstanceOf(ResponseShapeError);
+  });
+
+  it("refuses an idea whose quote has no verified flag", async () => {
+    const run = makeIdeasSucceeded([makeIdea()]);
+    const broken = structuredClone(run) as unknown as {
+      result: { ideas: { evidence: Record<string, unknown>[] }[] };
+    };
+    delete broken.result.ideas[0]?.evidence[0]?.verified;
+    answerRun(() => HttpResponse.json(broken));
+    await expect(analysesApi.get("p", "x")).rejects.toBeInstanceOf(ResponseShapeError);
   });
 });
 

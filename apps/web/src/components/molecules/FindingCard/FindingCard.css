@@ -42,38 +42,3 @@
 .finding-card__suggestion {
   margin: 0 0 var(--space-2);
 }
-
-.finding-card__evidence {
-  margin: 0 0 var(--space-2);
-  padding: 0;
-  list-style: none;
-}
-
-.finding-card__passage {
-  margin: 0 0 var(--space-2);
-}
-
-.finding-card__quote {
-  margin: 0;
-  padding: var(--space-1) var(--space-3);
-  border-left: 4px solid var(--color-border);
-  font-family: var(--font-writing);
-  white-space: pre-wrap;
-}
-
-.finding-card__check,
-.finding-card__where {
-  margin: var(--space-1) 0 0 var(--space-3);
-  font-size: 0.9rem;
-}
-
-.finding-card__check--found {
-  color: var(--color-success);
-}
-
-/* A quote that is not in the text is a warning: a dashed frame tells it apart without colour. */
-.finding-card__check--missing {
-  padding: 0 var(--space-2);
-  border: 2px dashed var(--color-danger);
-  color: var(--color-text);
-}

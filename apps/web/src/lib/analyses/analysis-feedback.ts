@@ -1,4 +1,10 @@
+import type { AnalysisKind } from "../api/analyses-api.ts";
 import { ApiError, NetworkError } from "../api/problem.ts";
+
+/** What a run of this kind is called in a sentence: "The scan could not be started". */
+export function thingFor(kind: AnalysisKind): string {
+  return kind === "ideas" ? "idea request" : "scan";
+}
 
 /** How long to wait, in words: "30 seconds", "5 minutes", "2 hours". Rounds up, never to zero. */
 export function describeWait(seconds: number): string {
@@ -35,7 +41,11 @@ function tryAgainIn(seconds: number | undefined, fallback: string): string {
  * Sorts a failed start into the kinds above and finds the words for it. Only fixed sentences are
  * shown: the technical `detail` of an error is never shown, and neither is the text of an unknown one.
  */
-export function describeStartError(error: unknown): StartProblem {
+export function describeStartError(
+  error: unknown,
+  kind: AnalysisKind = "plot_holes",
+): StartProblem {
+  const thing = thingFor(kind);
   if (error instanceof NetworkError) {
     return {
       kind: "problem",
@@ -43,10 +53,18 @@ export function describeStartError(error: unknown): StartProblem {
     };
   }
   if (!(error instanceof ApiError)) {
-    return { kind: "problem", message: "The scan could not be started. Please try again." };
+    return { kind: "problem", message: `The ${thing} could not be started. Please try again.` };
   }
 
   switch (error.status) {
+    case 400:
+      return {
+        kind: "problem",
+        message:
+          kind === "ideas"
+            ? "The server could not accept what you asked for. Check the focus: it can be at most 500 characters."
+            : `The ${thing} could not be started. Please try again.`,
+      };
     case 404:
       return { kind: "problem", message: "This project or item no longer exists." };
     case 409:
@@ -54,8 +72,7 @@ export function describeStartError(error: unknown): StartProblem {
     case 413:
       return {
         kind: "problem",
-        message:
-          "The text is too long for one scan. Choose a single act or scene instead of the whole project.",
+        message: `The text is too long for one ${thing}. Choose a single act or scene instead of the whole project.`,
       };
     case 422:
       return { kind: "problem", message: "There is no text to read yet. Write something first." };
@@ -63,7 +80,7 @@ export function describeStartError(error: unknown): StartProblem {
       if (error.code === "ai-daily-limit") {
         return {
           kind: "problem",
-          message: `You have used your scans for the last 24 hours. ${tryAgainIn(error.retryAfterSeconds, "Try again later.")}`,
+          message: `You have used your AI allowance for the last 24 hours. ${tryAgainIn(error.retryAfterSeconds, "Try again later.")}`,
         };
       }
       return {
@@ -79,7 +96,7 @@ export function describeStartError(error: unknown): StartProblem {
       }
       return {
         kind: "unavailable",
-        message: "The AI scan is not switched on on this server.",
+        message: "The AI features are not switched on on this server.",
       };
     case 401:
       return {
@@ -87,7 +104,7 @@ export function describeStartError(error: unknown): StartProblem {
         message: "Your login has ended. Please log in again.",
       };
     default:
-      return { kind: "problem", message: "The scan could not be started. Please try again." };
+      return { kind: "problem", message: `The ${thing} could not be started. Please try again.` };
   }
 }
 
@@ -96,29 +113,32 @@ export interface RunFailure {
   readonly message: string;
 }
 
+// `{thing}` is the word for the kind of run ("scan", "idea request"): see `thingFor`.
 const RUN_FAILURES: Readonly<Record<string, string>> = {
   refused:
-    "The AI declined to read this text. This can happen with very dark or sensitive material. Nothing was found, and you can try again with a smaller part.",
+    "The AI declined to read this text. This can happen with very dark or sensitive material. Nothing came of it, and you can try again with a smaller part.",
   truncated:
     "The answer was cut off because it grew too long. Try a single act or scene instead of the whole project.",
   invalid_output: "The AI's answer could not be understood. Please try again.",
   rate_limited: "The AI service is receiving too many requests right now. Please try again soon.",
   overloaded: "The AI service is busy or down for the moment. Please try again soon.",
-  timeout: "The scan took too long and was stopped. Try a single act or scene.",
+  timeout: "The {thing} took too long and was stopped. Try a single act or scene.",
   too_long: "The text is too long for the AI to read in one go. Choose a single act or scene.",
-  not_configured: "The AI scan is not working on this server right now. Please tell the owner.",
-  canceled: "You cancelled this scan.",
-  interrupted: "The server restarted while the scan ran. Please start it again.",
-  internal: "Something went wrong with the scan. Please try again.",
+  not_configured: "The AI is not working on this server right now. Please tell the owner.",
+  canceled: "You cancelled this {thing}.",
+  interrupted: "The server restarted during the {thing}. Please start it again.",
+  internal: "Something went wrong with the {thing}. Please try again.",
 };
 
-const UNKNOWN_FAILURE = "The scan did not finish. Please try again.";
+const UNKNOWN_FAILURE = "The {thing} did not finish. Please try again.";
 
 /** The sentence for a run that ended with this code. A code it does not know gets a plain one. */
-export function describeRunFailure(code: string | null): RunFailure {
-  return {
-    message: code === null ? UNKNOWN_FAILURE : ownEntry(RUN_FAILURES, code, UNKNOWN_FAILURE),
-  };
+export function describeRunFailure(
+  code: string | null,
+  kind: AnalysisKind = "plot_holes",
+): RunFailure {
+  const template = code === null ? UNKNOWN_FAILURE : ownEntry(RUN_FAILURES, code, UNKNOWN_FAILURE);
+  return { message: template.replaceAll("{thing}", thingFor(kind)) };
 }
 
 /** What went wrong with a plain read (the estimate, the history), in one sentence. */
@@ -127,7 +147,7 @@ export function describeReadError(error: unknown, what: "estimate" | "history" |
     what === "estimate"
       ? "the cost estimate"
       : what === "history"
-        ? "your earlier scans"
+        ? "your earlier results"
         : "the scan";
   if (error instanceof NetworkError) return `Can't reach the server to load ${noun}.`;
   if (error instanceof ApiError && error.status === 404) {
@@ -172,4 +192,21 @@ export function severityLabel(severity: Severity): string {
 /** The short word, for a badge. */
 export function severityWord(severity: Severity): string {
   return severity.charAt(0).toUpperCase() + severity.slice(1);
+}
+
+const IDEA_KIND_LABELS: Readonly<Record<string, string>> = {
+  plot_twist: "Plot twist",
+  scene: "Scene",
+  character: "Character",
+  conflict: "Conflict",
+  dialogue: "Dialogue",
+  theme: "Theme",
+  other: "Other",
+};
+
+/** The kind of an idea in words. A kind it does not know is made readable, like `categoryLabel`. */
+export function ideaKindLabel(kind: string): string {
+  if (Object.hasOwn(IDEA_KIND_LABELS, kind)) return ownEntry(IDEA_KIND_LABELS, kind, "Other");
+  const spaced = kind.replace(/[_-]+/g, " ").trim();
+  return spaced === "" ? "Other" : spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }

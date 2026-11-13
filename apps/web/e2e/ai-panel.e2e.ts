@@ -20,7 +20,7 @@ const STORY: readonly SeedDocument[] = [
   { title: "The Storm", inside: "Act One", content: "Waves crash on the rocks." },
 ];
 
-const toggle = (page: Page) => page.getByRole("button", { name: /Plot-hole finder/ });
+const toggle = (page: Page) => page.getByRole("button", { name: /AI assistant/ });
 const runButton = (page: Page) => page.getByRole("button", { name: "Run the scan" });
 const findings = (page: Page) => page.getByRole("list", { name: "Findings" });
 
@@ -57,7 +57,7 @@ test.describe("the plot-hole finder", () => {
     await expect(page.getByText(/Costs about/)).toBeVisible();
     await expect(page.getByText(/sent to Anthropic/)).toBeVisible();
     await expect(runButton(page)).toBeVisible();
-    await expect(page.getByText("No earlier scans.")).toBeVisible();
+    await expect(page.getByText("No earlier results.")).toBeVisible();
   });
 
   test("scans the whole project and shows findings whose quote links into the text", async ({
@@ -162,7 +162,7 @@ test.describe("the plot-hole finder", () => {
     await expect(findings(page)).toBeVisible({ timeout: RESULT_TIMEOUT });
   });
 
-  test("keeps earlier scans, which can be opened and deleted", async ({ page, request }) => {
+  test("keeps earlier results, which can be opened and deleted", async ({ page, request }) => {
     await openStory(page, request);
     await toggle(page).click();
     await runButton(page).click();
@@ -179,7 +179,7 @@ test.describe("the plot-hole finder", () => {
     await page.getByRole("button", { name: /^Delete the scan of the whole project/ }).click();
     await expect(page.getByRole("button", { name: "Keep scan" })).toBeFocused();
     await page.getByRole("button", { name: "Delete scan" }).click();
-    await expect(page.getByText("No earlier scans.")).toBeVisible();
+    await expect(page.getByText("No earlier results.")).toBeVisible();
   });
 
   test("works from the keyboard", async ({ page, request }) => {

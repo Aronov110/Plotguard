@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type Analysis,
+  type AnalysisKind,
   type AnalysisTarget,
   analysesApi,
   type Estimate,
 } from "../api/analyses-api.ts";
 import { ApiError, NetworkError } from "../api/problem.ts";
 import { useAuth } from "../auth/session.tsx";
-import { describeReadError, describeStartError } from "./analysis-feedback.ts";
+import { describeReadError, describeStartError, thingFor } from "./analysis-feedback.ts";
+import { focusToSend, isFocusValid } from "./focus.ts";
 
 /** How many earlier runs are shown at first, and added by each "Show older". */
 export const HISTORY_PAGE_SIZE = 10;
@@ -85,6 +87,13 @@ export interface UseAnalysisPanelOptions {
   readonly target: AnalysisTarget | undefined;
   /** Whether the panel is open. Nothing is loaded for a panel that was never opened. */
   readonly enabled: boolean;
+  /** What to ask for: plot holes (the default) or ideas. */
+  readonly kind?: AnalysisKind;
+  /**
+   * What the writer typed as the focus of an idea request. It is cleaned up before it is sent, and
+   * it is only ever sent for ideas.
+   */
+  readonly focus?: string;
 }
 
 export interface UseAnalysisPanel {
@@ -124,6 +133,8 @@ export function useAnalysisPanel({
   projectId,
   target,
   enabled,
+  kind = "plot_holes",
+  focus = "",
 }: UseAnalysisPanelOptions): UseAnalysisPanel {
   const { withAuth } = useAuth();
   const [estimate, setEstimate] = useState<EstimateView>({ status: "idle" });
@@ -163,15 +174,22 @@ export function useAnalysisPanel({
       live.current.controller = undefined;
       setRun({ phase: "finished", analysis });
       setReloads((count) => count + 1);
-      if (analysis.status === "succeeded") {
+      if (analysis.status !== "succeeded") {
+        announce(`The ${thingFor(analysis.kind)} did not finish.`);
+      } else if (analysis.kind === "ideas") {
+        const count = analysis.result?.ideas.length ?? 0;
+        announce(
+          count === 0
+            ? "The idea request has finished. No ideas came up."
+            : `The ideas are ready. ${count} ${count === 1 ? "idea" : "ideas"}.`,
+        );
+      } else {
         const count = analysis.result?.findings.length ?? 0;
         announce(
           count === 0
             ? "The scan has finished. No plot holes were found."
             : `The scan has finished. ${count} ${count === 1 ? "finding" : "findings"}.`,
         );
-      } else {
-        announce("The scan did not finish.");
       }
     },
     [announce, setRun],
@@ -207,7 +225,10 @@ export function useAnalysisPanel({
             if (error instanceof ApiError && error.status === 404) {
               live.current.controller = undefined;
               setRun({ phase: "idle" });
-              setProblem({ kind: "problem", message: "That scan no longer exists." });
+              setProblem({
+                kind: "problem",
+                message: `That ${thingFor(first.kind)} no longer exists.`,
+              });
               return;
             }
             if (!(error instanceof ApiError) && !(error instanceof NetworkError)) {
@@ -219,8 +240,7 @@ export function useAnalysisPanel({
               setRun({ phase: "idle" });
               setProblem({
                 kind: "problem",
-                message:
-                  "Lost contact with the server. The scan may still be running: reload the page to see it.",
+                message: `Lost contact with the server. The ${thingFor(first.kind)} may still be running: reload the page to see it.`,
               });
               return;
             }
@@ -261,7 +281,7 @@ export function useAnalysisPanel({
     }
     const controller = new AbortController();
     setEstimate((previous) => (previous.status === "ready" ? previous : { status: "loading" }));
-    withAuth(() => analysesApi.estimate(projectId, target, { signal: controller.signal }))
+    withAuth(() => analysesApi.estimate(projectId, target, { kind, signal: controller.signal }))
       .then((value) => {
         if (!controller.signal.aborted) setEstimate({ status: "ready", estimate: value });
       })
@@ -273,7 +293,7 @@ export function useAnalysisPanel({
     return () => {
       controller.abort();
     };
-  }, [enabled, projectId, key, reloads, withAuth]);
+  }, [enabled, projectId, key, kind, reloads, withAuth]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `reloads` only counts the reasons to load again (a run ended, "Try again"); changing it is what runs the load again
   useEffect(() => {
@@ -310,25 +330,35 @@ export function useAnalysisPanel({
   const start = useCallback((): void => {
     const phase = runRef.current.phase;
     if (target === undefined || phase === "starting" || phase === "running") return;
+    // The field says what is wrong with a focus that is too long, and the button is off. This is the
+    // second guard, for a press that gets round the button.
+    if (kind === "ideas" && !isFocusValid(focus)) return;
     stopWatching();
     const controller = new AbortController();
     live.current.controller = controller;
     const { epoch } = live.current;
     setProblem(undefined);
     setRun({ phase: "starting" });
-    announce("Starting the scan.");
+    announce(kind === "ideas" ? "Asking for ideas." : "Starting the scan.");
 
     void (async () => {
       try {
+        const sent = kind === "ideas" ? focusToSend(focus) : undefined;
         const analysis = await withAuth(() =>
-          analysesApi.start(projectId, target, { signal: controller.signal }),
+          analysesApi.start(
+            projectId,
+            target,
+            kind === "ideas"
+              ? { kind, signal: controller.signal, ...(sent === undefined ? {} : { focus: sent }) }
+              : { kind, signal: controller.signal },
+          ),
         );
         if (controller.signal.aborted || live.current.epoch !== epoch) return;
         if (analysis.status === "pending") watch(analysis);
         else finish(analysis);
       } catch (error) {
         if (controller.signal.aborted || live.current.epoch !== epoch) return;
-        const failure = describeStartError(error);
+        const failure = describeStartError(error, kind);
         if (failure.kind !== "already-running") {
           if (!(error instanceof ApiError) && !(error instanceof NetworkError))
             console.error(error);
@@ -352,13 +382,13 @@ export function useAnalysisPanel({
           if (controller.signal.aborted || live.current.epoch !== epoch) return;
         }
         const message =
-          "You already have a scan running, perhaps in another project. Wait until it has finished, then try again.";
+          "You already have an AI request running, perhaps in another project. Wait until it has finished, then try again.";
         setRun({ phase: "idle" });
         setProblem({ kind: "problem", message });
         announce(message);
       }
     })();
-  }, [announce, finish, projectId, setRun, stopWatching, target, watch, withAuth]);
+  }, [announce, finish, focus, kind, projectId, setRun, stopWatching, target, watch, withAuth]);
 
   const cancel = useCallback((): void => {
     const current = runRef.current;
@@ -379,16 +409,17 @@ export function useAnalysisPanel({
         else finish(analysis);
       } catch (error) {
         if (controller.signal.aborted || live.current.epoch !== epoch) return;
+        const thing = thingFor(current.analysis.kind);
         if (error instanceof ApiError && error.status === 404) {
           live.current.controller = undefined;
           setRun({ phase: "idle" });
-          setProblem({ kind: "problem", message: "That scan no longer exists." });
+          setProblem({ kind: "problem", message: `That ${thing} no longer exists.` });
           return;
         }
         // It could not be cancelled: the run goes on, so watch it again and say so.
         setProblem({
           kind: "problem",
-          message: "The scan could not be cancelled. Please try again.",
+          message: `The ${thing} could not be cancelled. Please try again.`,
         });
         watch(current.analysis);
       }
@@ -436,7 +467,7 @@ export function useAnalysisPanel({
         try {
           await withAuth(() => analysesApi.remove(projectId, analysis.id));
           forget();
-          announce("The scan was deleted.");
+          announce(`The ${thingFor(analysis.kind)} was deleted.`);
         } catch (error) {
           if (error instanceof ApiError && error.status === 404) {
             forget();
@@ -446,7 +477,7 @@ export function useAnalysisPanel({
             console.error(error);
           setProblem({
             kind: "problem",
-            message: "The scan could not be deleted. Please try again.",
+            message: `The ${thingFor(analysis.kind)} could not be deleted. Please try again.`,
           });
         }
       })();

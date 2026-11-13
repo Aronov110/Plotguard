@@ -322,27 +322,42 @@ someone else is answered with 404, exactly like one that does not exist. Every a
 
 ### The panel on the writing screen
 
-Under the outline and the text there is a collapsed "Plot-hole finder" section (a heading with one
+Under the outline and the text there is a collapsed "AI assistant" section (a heading with one
 disclosure button). Nothing is loaded until it is first opened.
 
-- **Choosing and running.** The writer picks the open item or the whole project, sees the size, the
-  price range and what is left of the day's allowance (`/estimate`, no AI call), and presses "Run the
-  scan". The privacy notice is in the page next to the button every time and is the button's
-  accessible description. A text that is too long for one scan disables the button and says why.
+- **Choosing and running.** A radio group asks "What do you want?": "Find plot holes" or "Get
+  ideas". It is locked while a run goes, and a run found going when the page opens decides what the
+  panel shows. The writer then picks the open item or the whole project, sees the size, the price
+  range and what is left of the day's allowance (`/estimate`, no AI call, shared by both kinds), and
+  presses "Run the scan" or "Get ideas". The privacy notice is in the page next to the button every
+  time and is the button's accessible description; for ideas it also says that the focus is sent and
+  saved. A text that is too long for one run disables the button and says why.
+- **The focus (ideas only).** An optional free text, "What should the ideas be about?", at most 500
+  characters, counted the way the server counts (spaces tidied, an emoji is one character: the rules
+  are copied in `apps/web/src/lib/analyses/focus.ts`, with the API's own test cases). The count is in
+  the field's hint, so it does not chatter on every key; over the limit there is an error tied to the
+  field, said once to a screen reader, and Run is disabled. The text stays after a run, so that it
+  can be adjusted. It is sent cleaned up and never with a plot-hole scan.
 - **Watching a run.** The screen asks `GET …/analyses/:id` every 2 seconds (4 seconds after the
   first 15 asks, slower after answers that did not come, up to 10 seconds). It says so after three
   failed asks, keeps trying, and gives up after 30 with a hint to reload. The run is not tied to the
   page: after a reload the panel finds a run that is still `pending` in the history and watches it
   again. Cancel stops it. A run that is already going in another project (the API allows one per
   person) is explained, not shown as an error.
-- **Results.** A summary, a count by severity, and one card per finding: severity and kind in words
-  (never only colour), the explanation, each quoted passage marked "Found in your text" or "Not found
-  in your text" (a quote the AI may have invented), a link to the item a passage is in, and a way to
-  fix it. All of it is plain text. A run that did not finish says why in plain words per `errorCode`.
-- **History.** The last ten scans (with "Show older scans"), each openable (the focus moves to its
-  result) and deletable behind a confirmation that keeps the safe answer focused.
-- **Where the code is.** `apps/web/src/lib/api/analyses-api.ts` (the calls),
-  `apps/web/src/lib/analyses/` (the hook, the wording of every error, the cost text) and
+- **Results.** A plot-hole scan shows a summary, a count by severity, and one card per finding:
+  severity and kind in words (never only colour), the explanation, each quoted passage marked "Found
+  in your text" or "Not found in your text" (a quote the AI may have invented), a link to the item a
+  passage is in, and a way to fix it. An idea run shows the focus that was asked for, a summary and
+  one card per idea: the kind in words (plot twist, scene, character, conflict, dialogue, theme), the
+  description, "Why it fits", the same marked quotes, and "Could go in" as a link when that item is
+  still in the outline. The quote part is one shared component (`EvidenceList`). All of it is plain
+  text. A run that did not finish says why in plain words per `errorCode`.
+- **History.** The last ten results of both kinds (with "Show older results"), each named for its
+  kind ("Plot holes" or "Ideas"), openable (the focus moves to its result) and deletable behind a
+  confirmation that keeps the safe answer focused.
+- **Where the code is.** `apps/web/src/lib/api/analyses-api.ts` (the calls; a run is a union by
+  `kind`, so a plot-hole result under the kind `ideas` is refused), `apps/web/src/lib/analyses/` (the
+  hook, the wording of every error, the cost text, the focus rules) and
   `apps/web/src/components/organisms/AiPanel/`.
 
 ## Checks
