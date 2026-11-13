@@ -3,9 +3,19 @@ import {
   makeAnalysis,
   makeFailed,
   makeFinding,
+  makeIdea,
+  makeIdeasAnalysis,
+  makeIdeasSucceeded,
   makeSucceeded,
 } from "../../../test-support/analyses-handlers.ts";
-import { countFindings, describeScope, formatRunTime, statusWord } from "../describe-run.ts";
+import {
+  countFindings,
+  countIdeas,
+  describeScope,
+  formatRunTime,
+  kindWord,
+  statusWord,
+} from "../describe-run.ts";
 
 describe("formatRunTime", () => {
   it("gives the date and the time in the zone asked for", () => {
@@ -81,5 +91,42 @@ describe("statusWord", () => {
 
   it("says cancelled for a run the writer stopped", () => {
     expect(statusWord(makeFailed("canceled"))).toBe("cancelled");
+  });
+});
+
+describe("statusWord for ideas", () => {
+  it("says running, how many ideas, or that it did not finish", () => {
+    expect(statusWord(makeIdeasAnalysis())).toBe("running");
+    expect(statusWord(makeIdeasSucceeded([]))).toBe("no ideas");
+    expect(statusWord(makeIdeasSucceeded([makeIdea()]))).toBe("1 idea");
+    expect(statusWord(makeIdeasSucceeded([makeIdea(), makeIdea()]))).toBe("2 ideas");
+    expect(statusWord(makeIdeasAnalysis({ status: "failed", errorCode: "timeout" }))).toBe(
+      "did not finish",
+    );
+  });
+
+  it("says cancelled for an idea request the writer stopped", () => {
+    expect(statusWord(makeIdeasAnalysis({ status: "failed", errorCode: "canceled" }))).toBe(
+      "cancelled",
+    );
+  });
+
+  it("does not say findings for ideas", () => {
+    expect(statusWord(makeIdeasSucceeded([makeIdea()]))).not.toContain("finding");
+  });
+});
+
+describe("countIdeas", () => {
+  it("counts in words", () => {
+    expect(countIdeas([])).toBe("No ideas.");
+    expect(countIdeas([makeIdea()])).toBe("1 idea.");
+    expect(countIdeas([makeIdea(), makeIdea(), makeIdea()])).toBe("3 ideas.");
+  });
+});
+
+describe("kindWord", () => {
+  it("names the kind of run for the history", () => {
+    expect(kindWord("plot_holes")).toBe("Plot holes");
+    expect(kindWord("ideas")).toBe("Ideas");
   });
 });

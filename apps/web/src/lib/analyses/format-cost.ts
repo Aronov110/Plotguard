@@ -22,7 +22,7 @@ export function describeCost(estimate: Estimate): string {
 /** What is left of the writer's allowance, in words. */
 export function describeAllowance(remaining: Estimate["remaining"]): string {
   const runs = Math.max(0, remaining.runs);
-  return `You have ${runs} ${runs === 1 ? "scan" : "scans"} left in the last 24 hours.`;
+  return `You have ${runs} ${runs === 1 ? "AI request" : "AI requests"} left in the last 24 hours.`;
 }
 
 /** The size of the text in words that mean something to a writer. */

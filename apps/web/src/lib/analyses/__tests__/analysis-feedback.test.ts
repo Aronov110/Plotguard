@@ -6,8 +6,10 @@ import {
   describeRunFailure,
   describeStartError,
   describeWait,
+  ideaKindLabel,
   severityLabel,
   severityWord,
+  thingFor,
 } from "../analysis-feedback.ts";
 
 function apiError(
@@ -137,6 +139,20 @@ describe("describeStartError", () => {
   });
 });
 
+const RUN_CODES = [
+  "refused",
+  "truncated",
+  "invalid_output",
+  "rate_limited",
+  "overloaded",
+  "timeout",
+  "too_long",
+  "not_configured",
+  "canceled",
+  "interrupted",
+  "internal",
+];
+
 describe("describeRunFailure", () => {
   const codes = [
     "refused",
@@ -181,7 +197,9 @@ describe("describeRunFailure", () => {
 describe("describeReadError", () => {
   it("names what could not be loaded", () => {
     expect(describeReadError(new Error("x"), "estimate")).toBe("Could not load the cost estimate.");
-    expect(describeReadError(new Error("x"), "history")).toBe("Could not load your earlier scans.");
+    expect(describeReadError(new Error("x"), "history")).toBe(
+      "Could not load your earlier results.",
+    );
     expect(describeReadError(new Error("x"), "run")).toBe("Could not load the scan.");
   });
 
@@ -231,5 +249,105 @@ describe("severity words", () => {
     expect(severityLabel("minor")).toContain("small");
     expect(severityWord("major")).toBe("Major");
     expect(severityWord("minor")).toBe("Minor");
+  });
+});
+
+describe("wording for an idea request", () => {
+  it("names the thing by kind", () => {
+    expect(thingFor("plot_holes")).toBe("scan");
+    expect(thingFor("ideas")).toBe("idea request");
+  });
+
+  it("says an idea request could not be started, not a scan", () => {
+    expect(describeStartError(apiError(500), "ideas")).toMatchObject({
+      message: "The idea request could not be started. Please try again.",
+    });
+    expect(describeStartError(apiError(500), "plot_holes")).toMatchObject({
+      message: "The scan could not be started. Please try again.",
+    });
+    expect(describeStartError(new Error("x"), "ideas")).toMatchObject({
+      message: expect.stringContaining("idea request"),
+    });
+  });
+
+  it("is a scan when no kind is given", () => {
+    expect(describeStartError(apiError(500))).toMatchObject({
+      message: expect.stringContaining("scan"),
+    });
+  });
+
+  it("says the text is too long for one idea request", () => {
+    expect(describeStartError(apiError(413), "ideas")).toMatchObject({
+      message: expect.stringContaining("one idea request"),
+    });
+  });
+
+  it("calls the shared allowance an allowance, not scans", () => {
+    const problem = describeStartError(apiError(429, "ai-daily-limit"), "ideas");
+    expect(problem).toMatchObject({ message: expect.stringContaining("AI allowance") });
+    expect(JSON.stringify(problem)).not.toContain("scans");
+  });
+
+  it("explains a focus the server refused (400), without repeating the server's text", () => {
+    const problem = describeStartError(
+      apiError(400, "validation-error", { detail: "SECRET focus text" }),
+      "ideas",
+    );
+    expect(problem).toMatchObject({
+      kind: "problem",
+      message: expect.stringContaining("focus"),
+    });
+    expect(JSON.stringify(problem)).not.toContain("SECRET");
+  });
+
+  it("does not mention a focus for a 400 on a scan", () => {
+    expect(JSON.stringify(describeStartError(apiError(400), "plot_holes"))).not.toContain("focus");
+  });
+
+  it("keeps the run failures right for each kind", () => {
+    expect(describeRunFailure("canceled", "ideas").message).toBe(
+      "You cancelled this idea request.",
+    );
+    expect(describeRunFailure("canceled", "plot_holes").message).toBe("You cancelled this scan.");
+    expect(describeRunFailure("timeout", "ideas").message).toContain("idea request");
+    expect(describeRunFailure("interrupted", "ideas").message).toContain("idea request");
+  });
+
+  it("does not leave a placeholder in any sentence, in any kind", () => {
+    for (const kind of ["plot_holes", "ideas"] as const) {
+      for (const code of [...RUN_CODES, "brand_new", null]) {
+        expect(describeRunFailure(code, kind).message).not.toContain("{");
+      }
+    }
+  });
+
+  it("gives every code a different sentence for ideas too", () => {
+    const messages = new Set(RUN_CODES.map((code) => describeRunFailure(code, "ideas").message));
+    expect(messages.size).toBe(RUN_CODES.length);
+  });
+
+  it("does not say a refused request found nothing: an idea request finds nothing to begin with", () => {
+    expect(describeRunFailure("refused", "ideas").message).not.toContain("Nothing was found");
+  });
+});
+
+describe("ideaKindLabel", () => {
+  it.each([
+    ["plot_twist", "Plot twist"],
+    ["scene", "Scene"],
+    ["character", "Character"],
+    ["conflict", "Conflict"],
+    ["dialogue", "Dialogue"],
+    ["theme", "Theme"],
+    ["other", "Other"],
+  ])("says %s as %s", (kind, label) => {
+    expect(ideaKindLabel(kind)).toBe(label);
+  });
+
+  it("makes an unknown kind readable and is not fooled by inherited names", () => {
+    expect(ideaKindLabel("a_new_one")).toBe("A new one");
+    expect(ideaKindLabel("")).toBe("Other");
+    expect(ideaKindLabel("constructor")).toBe("Constructor");
+    expect(ideaKindLabel("__proto__")).toBe("Proto");
   });
 });

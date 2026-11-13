@@ -14,8 +14,8 @@ export interface CostHintProps {
 }
 
 /**
- * What a scan would cost, before it is run: the size of the text, a rough price and what is left of
- * the day's allowance. It makes no AI call. A text that is too long for one scan says so here.
+ * What a run would cost, before it is run: the size of the text, a rough price and what is left of
+ * the day's allowance. It makes no AI call. A text that is too long for one go says so here.
  */
 export function CostHint({ view, onRetry }: CostHintProps): ReactElement | null {
   switch (view.status) {
@@ -46,7 +46,7 @@ export function CostHint({ view, onRetry }: CostHintProps): ReactElement | null 
           </p>
           {estimate.fits ? null : (
             <p className="cost-hint__warning">
-              This text is too long for one scan. Choose a single act or scene.
+              This text is too long for the AI to read in one go. Choose a single act or scene.
             </p>
           )}
         </div>

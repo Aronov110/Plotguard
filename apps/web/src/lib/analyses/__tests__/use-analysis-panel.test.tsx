@@ -201,7 +201,7 @@ describe("loading the estimate and the history", () => {
     const { result } = await renderPanel();
     expect(result.current.history).toEqual({
       status: "failed",
-      message: "Could not load your earlier scans.",
+      message: "Could not load your earlier results.",
     });
   });
 

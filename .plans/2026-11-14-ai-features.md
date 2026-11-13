@@ -1,4 +1,4 @@
-Status: approved (2026-11-14); PRs 5a (#24), 5b (#25) and the link fix (#26) merged; PR 5c-1 (ideas API) built, pending review and merge. Decisions taken as recommended ("a for all"): 1-A the model is
+Status: approved (2026-11-14); PRs 5a (#24), 5b (#25) and the link fix (#26) merged; PR 5c-1 (ideas API) merged (#27); PR 5c-2 (ideas in the web panel) built, pending review and merge. Decisions taken as recommended ("a for all"): 1-A the model is
 `claude-opus-5-5` (about $0.30 a run, set by `AI_MODEL`); 2-A a background run with polling; 3-A limits of
 10 runs and 1,000,000 tokens per person per day and 5,000,000 tokens per day for everyone; 4-A the first
 release offers the open item and the whole project; 5-A the privacy notice is shown with the Run button
@@ -166,3 +166,88 @@ Done as planned. Web is untouched (5c-2 follows).
   has a `focus` key.
 - Not verified: a live ideas run against the real model (one smoke test, a few cents, needs your approval);
   the quality of the ideas is unmeasured. Migration `0004` is NOT applied to the development database yet.
+
+## PR 5c-2 (the idea generator in the web panel, `feat/ai-ideas-web`)
+
+Status: approved (decisions taken as recommended, "a for all"): the mode is a radio group, the focus
+text is kept after a run, one PR. No API change, no new dependency.
+
+### Goal
+
+In the writing screen's panel a writer can switch between "Find plot holes" and "Get ideas". For ideas
+they can type an optional focus (at most 500 characters), and they get idea cards with quotes and links
+into the text. The history says which kind each run was. Done means: unit, page and browser tests green
+on both browsers, axe clean in both modes, and the privacy notice tells the truth about the focus.
+
+### What the writer sees
+
+- Heading "AI assistant"; a radio group "What do you want?" ("Find plot holes" / "Get ideas"), locked
+  while a run goes; the scope choice, cost hint and Cancel are shared.
+- Ideas mode: a labelled multi-line "What should the ideas be about? (optional)" with a hint, a counter
+  ("123 of 500", counted like the server: whitespace tidied, a character is a character), an error tied to
+  the field over the limit (Run disabled). The text is kept after a run.
+- Buttons: plot holes keep "Run the scan" / "Scanning…" / "Cancel the scan"; ideas say "Get ideas" /
+  "Thinking of ideas…" / "Cancel".
+- Privacy notice: says the text and the focus are sent to Anthropic, and that the results and the focus
+  are saved in the history until deleted.
+- Results: "Ideas for …", the echoed focus, summary, count, "These are suggestions. Use what helps.",
+  idea cards (title, kind in words, description, "Why it fits", quotes found / not found with links,
+  "Could go in: <item>" as a link).
+- History rows say "Ideas" or "Plot holes"; buttons "Open the ideas for …" / "Open the scan of …".
+
+### Files
+
+`lib/api/analyses-api.ts` (union by kind, `focus`, `kind` for estimate and start); `lib/analyses/`
+(`use-analysis-panel.ts`, `analysis-feedback.ts`, `describe-run.ts`, new `focus.ts`); components
+(`IdeaCard`, `ModeChoice`, `FocusField`, a shared evidence list; edited `FindingCard`, `AnalysisResult`,
+`AiPanel`, `AiPrivacyNotice`); tests, `e2e/ai-panel.e2e.ts`, `test-support/analyses-handlers.ts`; README.
+
+### Tests
+
+API library with MSW (both kinds, mismatched kind and result refused, focus only for ideas, kind in the
+estimate); a focus table copied from the API's cases (spaces, line breaks, invisible characters, emoji,
+exactly 500 and 501); hook with fake timers (mode and focus reach the start, mode change reloads the
+estimate, resume in the right mode, stale answers dropped); components; panel; axe in both modes; browser
+tests on Chromium and WebKit; a mutation check; a full browser run.
+
+### Security and accessibility
+
+All AI text and the echoed focus are shown as plain text; links only from known ids; nothing new is kept
+in the browser. Radio group with a label, focus field with label, hint and error tied to it, counter not
+a live region, kinds and quote checks in words, 24 px targets, contrast as before.
+
+### Alternatives and risks
+
+Rejected: a second panel, tabs, a creativity slider. Risks: the union touches 5b code; the focus count
+could differ from the server's (guard: a shared case table); the heading rename touches 4 files.
+
+### Outcome of PR 5c-2 (the idea generator in the web panel, `feat/ai-ideas-web`)
+
+Done as planned; no API change and no new dependency. Decisions taken as recommended: radios for the
+mode, the focus text kept after a run, one PR.
+
+- Built: the panel is "AI assistant" with a mode choice; a focus field for ideas (counter in the hint,
+  error tied to the field, said once to a screen reader, Run off over 500 characters); idea cards;
+  `EvidenceList` shared by findings and ideas; history rows and buttons named per kind; wording by kind
+  (`thingFor`); `analyses-api.ts` is a union by `kind`; `focus.ts` copies the API's focus rules with the
+  API's own test cases; the privacy notice says the focus is sent and saved.
+- Deliberate wording changes to older code (their tests changed on purpose): "Plot-hole finder" is
+  "AI assistant"; "Earlier scans" is "Earlier results" (the list holds both kinds); the allowance is
+  "AI requests" (it is shared); "too long for one scan" is "too long for the AI to read in one go";
+  "not switched on" no longer says "scan"; a 409 elsewhere says "AI request". The Cancel button for
+  ideas reads "Cancel the request" (the plan said "Cancel").
+- Tests: web 1,913 -> 2,080 in 111 files; 10 new browser tests (Chromium and WebKit) with axe in ideas
+  mode (open, too long, running, with a result); lint, both typechecks and `bun audit` clean. Full
+  browser run: 422 passed, 2 skipped, 2 failed on WebKit in `sign-out-race.e2e.ts`, which passed 12 of
+  12 when run alone (a load flake, like the known WebKit login test; unrelated to this PR).
+- Mutation check: 25 real breaks, all caught (invisible characters, UTF-16 count, off-by-one limit, blank
+  focus sent, focus sent for a plot-hole scan, estimate kind, wrong result shape accepted, no focus
+  check before start, kind missing from the estimate key, uncleaned focus, scan wording for ideas,
+  history word, running run's kind ignored, Run not stopped by a long focus, a long focus blocking a
+  scan, privacy notice without kind, mode unlocked while running, error one late, link to an item not
+  in the outline, unencoded id, every quote "found", focus not shown, result titled as a scan).
+- Found by the tests: my own arithmetic and `getByText` (matches the `<strong>`, not its paragraph)
+  mistakes, not product bugs. A hook that read a stale `focus` was avoided by putting `kind` and `focus`
+  in `start`'s dependencies.
+- Not verified: ideas through a real browser against the real model (the live tour); large manuscripts;
+  quality of the ideas. The dev servers were stopped by the system for low memory, not restarted.

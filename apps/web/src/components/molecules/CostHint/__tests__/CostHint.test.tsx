@@ -33,11 +33,11 @@ describe("CostHint", () => {
     const hint = screen.getByRole("status");
     expect(hint).toHaveTextContent("About 100 pages of text.");
     expect(hint).toHaveTextContent("Costs about $0.09 to $0.33.");
-    expect(hint).toHaveTextContent("You have 7 scans left in the last 24 hours.");
+    expect(hint).toHaveTextContent("You have 7 AI requests left in the last 24 hours.");
     expect(hint).not.toHaveTextContent("too long");
   });
 
-  it("warns when the text is too long for one scan", () => {
+  it("warns when the text is too long for one go", () => {
     render(
       <CostHint
         view={{ status: "ready", estimate: makeEstimate({ fits: false }) }}
@@ -45,7 +45,7 @@ describe("CostHint", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "This text is too long for one scan. Choose a single act or scene.",
+      "This text is too long for the AI to read in one go. Choose a single act or scene.",
     );
   });
 

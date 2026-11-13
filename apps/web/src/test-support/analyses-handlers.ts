@@ -1,11 +1,19 @@
 import { HttpResponse, http } from "msw";
-import type { Analysis, AnalysisPage, Estimate, Finding } from "../lib/api/analyses-api.ts";
+import type {
+  Analysis,
+  AnalysisPage,
+  Estimate,
+  Finding,
+  Idea,
+  IdeasAnalysis,
+  PlotHoleAnalysis,
+} from "../lib/api/analyses-api.ts";
 import { server } from "./msw-server.ts";
 
 let counter = 0;
 
 /** A run with made-up details. It is `pending`, as a run just started is. */
-export function makeAnalysis(overrides: Partial<Analysis> = {}): Analysis {
+export function makeAnalysis(overrides: Partial<PlotHoleAnalysis> = {}): PlotHoleAnalysis {
   counter += 1;
   return {
     id: `0190c000-0000-7000-8000-${String(counter).padStart(12, "0")}`,
@@ -17,12 +25,52 @@ export function makeAnalysis(overrides: Partial<Analysis> = {}): Analysis {
     model: "claude-opus-5-5",
     inputTokens: 0,
     outputTokens: 0,
+    focus: null,
     result: null,
     errorCode: null,
     createdAt: "2026-11-12T10:00:00.000Z",
     completedAt: null,
     ...overrides,
   };
+}
+
+/** An idea request that is going: `pending`, with the focus it was asked with (none by default). */
+export function makeIdeasAnalysis(overrides: Partial<IdeasAnalysis> = {}): IdeasAnalysis {
+  const { kind: _kind, result: _result, ...base } = makeAnalysis();
+  return { ...base, kind: "ideas", result: null, ...overrides };
+}
+
+/** One idea, with one verified quote and a place to go. */
+export function makeIdea(overrides: Partial<Idea> = {}): Idea {
+  counter += 1;
+  return {
+    title: `Idea ${counter}`,
+    kind: "plot_twist",
+    description: "Something the story could do.",
+    whyItFits: "It builds on what is already there.",
+    evidence: [{ documentId: "doc-1", quote: "A quoted passage.", verified: true }],
+    goesIn: "doc-1",
+    ...overrides,
+  };
+}
+
+/** A finished idea request with these ideas. */
+export function makeIdeasSucceeded(
+  ideas: readonly Idea[],
+  overrides: Partial<IdeasAnalysis> = {},
+): IdeasAnalysis {
+  return makeIdeasAnalysis({
+    status: "succeeded",
+    inputTokens: 1700,
+    outputTokens: 1200,
+    completedAt: "2026-11-12T10:00:20.000Z",
+    result: {
+      summary: "The story could go in a few directions.",
+      ideas: [...ideas],
+      read: { items: 2, characters: 525 },
+    },
+    ...overrides,
+  });
 }
 
 /** One finding, with one verified quote. */
@@ -42,8 +90,8 @@ export function makeFinding(overrides: Partial<Finding> = {}): Finding {
 /** A finished run with these findings. */
 export function makeSucceeded(
   findings: readonly Finding[],
-  overrides: Partial<Analysis> = {},
-): Analysis {
+  overrides: Partial<PlotHoleAnalysis> = {},
+): PlotHoleAnalysis {
   return makeAnalysis({
     status: "succeeded",
     inputTokens: 1700,
@@ -59,7 +107,10 @@ export function makeSucceeded(
 }
 
 /** A run that ended with this code. */
-export function makeFailed(errorCode: string, overrides: Partial<Analysis> = {}): Analysis {
+export function makeFailed(
+  errorCode: string,
+  overrides: Partial<PlotHoleAnalysis> = {},
+): PlotHoleAnalysis {
   return makeAnalysis({
     status: "failed",
     errorCode,

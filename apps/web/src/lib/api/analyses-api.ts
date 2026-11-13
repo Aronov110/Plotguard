@@ -30,21 +30,47 @@ const resultSchema = z.object({
   read: z.object({ items: z.number().int(), characters: z.number().int() }),
 });
 
-const analysisSchema = z.object({
+const ideaSchema = z.object({
+  title: z.string(),
+  /** Plain string on purpose, like `category`: a new kind of idea must not break the panel. */
+  kind: z.string(),
+  description: z.string(),
+  whyItFits: z.string(),
+  evidence: z.array(evidenceSchema),
+  /** The item the idea could go into, or `null` for the story as a whole. */
+  goesIn: z.string().nullable(),
+});
+
+const ideasResultSchema = z.object({
+  summary: z.string(),
+  ideas: z.array(ideaSchema),
+  read: z.object({ items: z.number().int(), characters: z.number().int() }),
+});
+
+const analysisBase = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
   documentId: z.string().nullable(),
-  kind: z.enum(["plot_holes"]),
   scope: z.enum(["document", "project"]),
   status: z.enum(["pending", "succeeded", "failed"]),
   model: z.string(),
   inputTokens: z.number().int(),
   outputTokens: z.number().int(),
-  result: resultSchema.nullable(),
+  /** What the writer asked the ideas to be about; `null` for a plot-hole scan or no focus. */
+  focus: z.string().nullable(),
   errorCode: z.string().nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });
+
+/**
+ * A run. The `kind` decides the shape of the result, so a plot-hole result under the kind `ideas`
+ * (or the other way round) is refused rather than shown.
+ */
+const analysisSchema = z.discriminatedUnion("kind", [
+  analysisBase.extend({ kind: z.literal("plot_holes"), result: resultSchema.nullable() }),
+  analysisBase.extend({ kind: z.literal("ideas"), result: ideasResultSchema.nullable() }),
+]);
 
 const analysisPageSchema = z.object({
   items: z.array(analysisSchema),
@@ -69,7 +95,11 @@ const estimateSchema = z.object({
 
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type Finding = z.infer<typeof findingSchema>;
+export type Idea = z.infer<typeof ideaSchema>;
 export type Analysis = z.infer<typeof analysisSchema>;
+export type PlotHoleAnalysis = Extract<Analysis, { kind: "plot_holes" }>;
+export type IdeasAnalysis = Extract<Analysis, { kind: "ideas" }>;
+export type AnalysisKind = Analysis["kind"];
 export type AnalysisPage = z.infer<typeof analysisPageSchema>;
 export type Estimate = z.infer<typeof estimateSchema>;
 
@@ -82,6 +112,18 @@ export interface AnalysisCallOptions {
   readonly signal?: AbortSignal;
 }
 
+/** What `estimate` is asked about besides the target. The kind is plot holes when left out. */
+export interface EstimateOptions extends AnalysisCallOptions {
+  readonly kind?: AnalysisKind;
+}
+
+/**
+ * What `start` is asked besides the target. A focus belongs to ideas only (the server refuses it for
+ * a plot-hole scan), so the type does not allow it there. Send it already cleaned up (`focusToSend`).
+ */
+export type StartOptions = AnalysisCallOptions &
+  ({ readonly kind?: "plot_holes" } | { readonly kind: "ideas"; readonly focus?: string });
+
 export interface ListAnalysesOptions extends AnalysisCallOptions {
   /** The `nextCursor` of the previous page. Leave it out for the first page. */
   readonly cursor?: string;
@@ -91,25 +133,17 @@ export interface ListAnalysesOptions extends AnalysisCallOptions {
 /**
  * The AI routes the writing screen uses. All need the access token: run them through `withAuth` so
  * that an expired token is renewed once. Each call throws `ApiError`, `NetworkError` or
- * `ResponseShapeError`. Only the plot-hole scan exists so far, so the kind is fixed.
+ * `ResponseShapeError`.
  */
 export interface AnalysesApi {
   /** What a run would use and cost, and what is left of the allowance. Makes no AI call. */
-  estimate(
-    projectId: string,
-    target: AnalysisTarget,
-    options?: AnalysisCallOptions,
-  ): Promise<Estimate>;
+  estimate(projectId: string, target: AnalysisTarget, options?: EstimateOptions): Promise<Estimate>;
   /**
    * Starts a run; it comes back `pending`. 409 means a run is already going, 422 that there is no
    * text, 413 that the text is too long, 429 that the day's allowance is used, 503 that the AI
    * features are off or the day's overall budget is used.
    */
-  start(
-    projectId: string,
-    target: AnalysisTarget,
-    options?: AnalysisCallOptions,
-  ): Promise<Analysis>;
+  start(projectId: string, target: AnalysisTarget, options?: StartOptions): Promise<Analysis>;
   /** One run as it is now. */
   get(projectId: string, id: string, options?: AnalysisCallOptions): Promise<Analysis>;
   /** The runs of a project, newest first. */
@@ -131,16 +165,23 @@ function analysesPath(projectId: string, id?: string, action?: string): string {
   return action === undefined ? one : `${one}/${action}`;
 }
 
-function targetQuery(target: AnalysisTarget): string {
-  const query = new URLSearchParams({ kind: "plot_holes", scope: target.scope });
+function targetQuery(target: AnalysisTarget, kind: AnalysisKind): string {
+  const query = new URLSearchParams({ kind, scope: target.scope });
   if (target.scope === "document") query.set("documentId", target.documentId);
   return query.toString();
 }
 
-function targetBody(target: AnalysisTarget): Record<string, string> {
-  return target.scope === "document"
-    ? { kind: "plot_holes", scope: "document", documentId: target.documentId }
-    : { kind: "plot_holes", scope: "project" };
+function startBody(target: AnalysisTarget, options: StartOptions): Record<string, string> {
+  const kind = options.kind ?? "plot_holes";
+  const body: Record<string, string> =
+    target.scope === "document"
+      ? { kind, scope: "document", documentId: target.documentId }
+      : { kind, scope: "project" };
+  // A blank focus means none: it is left out rather than sent empty.
+  if (options.kind === "ideas" && options.focus !== undefined && options.focus !== "") {
+    body.focus = options.focus;
+  }
+  return body;
 }
 
 function withSignal(signal: AbortSignal | undefined): { signal?: AbortSignal } {
@@ -148,18 +189,18 @@ function withSignal(signal: AbortSignal | undefined): { signal?: AbortSignal } {
 }
 
 export const analysesApi: AnalysesApi = {
-  estimate: (projectId, target, { signal } = {}) =>
-    apiJson(`${analysesPath(projectId)}/estimate?${targetQuery(target)}`, estimateSchema, {
+  estimate: (projectId, target, { kind = "plot_holes", signal } = {}) =>
+    apiJson(`${analysesPath(projectId)}/estimate?${targetQuery(target, kind)}`, estimateSchema, {
       auth: true,
       ...withSignal(signal),
     }),
 
-  start: (projectId, target, { signal } = {}) =>
+  start: (projectId, target, options = {}) =>
     apiJson(analysesPath(projectId), analysisSchema, {
       method: "POST",
       auth: true,
-      json: targetBody(target),
-      ...withSignal(signal),
+      json: startBody(target, options),
+      ...withSignal(options.signal),
     }),
 
   get: (projectId, id, { signal } = {}) =>

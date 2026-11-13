@@ -29,18 +29,18 @@ describe("describeCost", () => {
 });
 
 describe("describeAllowance", () => {
-  it("says how many scans are left", () => {
+  it("says how many AI requests are left", () => {
     expect(describeAllowance({ runs: 10, tokens: 1 })).toBe(
-      "You have 10 scans left in the last 24 hours.",
+      "You have 10 AI requests left in the last 24 hours.",
     );
     expect(describeAllowance({ runs: 1, tokens: 1 })).toBe(
-      "You have 1 scan left in the last 24 hours.",
+      "You have 1 AI request left in the last 24 hours.",
     );
   });
 
   it("says none, never a negative number", () => {
-    expect(describeAllowance({ runs: 0, tokens: 0 })).toContain("You have 0 scans left");
-    expect(describeAllowance({ runs: -3, tokens: 0 })).toContain("You have 0 scans left");
+    expect(describeAllowance({ runs: 0, tokens: 0 })).toContain("You have 0 AI requests left");
+    expect(describeAllowance({ runs: -3, tokens: 0 })).toContain("You have 0 AI requests left");
   });
 });
 

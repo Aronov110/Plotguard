@@ -71,7 +71,7 @@ async function flush(ms = 0): Promise<void> {
 }
 
 async function openPanel(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.click(screen.getByRole("button", { name: /Plot-hole finder/ }));
+  await user.click(screen.getByRole("button", { name: /AI assistant/ }));
   await flush();
 }
 
@@ -92,7 +92,7 @@ describe("AiPanel: opening and closing", () => {
   it("starts closed, and loads nothing until it is opened", async () => {
     const api = spies();
     await renderPanel();
-    const toggle = screen.getByRole("button", { name: /Plot-hole finder/ });
+    const toggle = screen.getByRole("button", { name: /AI assistant/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "Run the scan" })).not.toBeInTheDocument();
     await flush(5000);
@@ -103,10 +103,10 @@ describe("AiPanel: opening and closing", () => {
   it("opens and closes with the one button, which the panel's heading holds", async () => {
     spies();
     const { user } = await renderPanel();
-    expect(screen.getByRole("heading", { level: 2, name: /Plot-hole finder/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /AI assistant/ })).toBeInTheDocument();
 
     await openPanel(user);
-    const toggle = screen.getByRole("button", { name: /Plot-hole finder/ });
+    const toggle = screen.getByRole("button", { name: /AI assistant/ });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: "Run the scan" })).toBeVisible();
 
@@ -119,7 +119,7 @@ describe("AiPanel: opening and closing", () => {
     spies();
     const { user } = await renderPanel();
     await user.tab();
-    expect(screen.getByRole("button", { name: /Plot-hole finder/ })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /AI assistant/ })).toHaveFocus();
     await user.keyboard("{Enter}");
     await flush();
     expect(screen.getByRole("button", { name: "Run the scan" })).toBeVisible();
@@ -131,17 +131,17 @@ describe("AiPanel: opening and closing", () => {
     await openPanel(user);
 
     expect(screen.getByText(/Costs about \$0\.09 to \$0\.33\./)).toBeVisible();
-    expect(screen.getByText(/You have 10 scans left/)).toBeVisible();
+    expect(screen.getByText(/You have 10 AI requests left/)).toBeVisible();
     const run = screen.getByRole("button", { name: "Run the scan" });
     expect(run).toHaveAccessibleDescription(/sent to Anthropic/);
   });
 
-  it("says there are no earlier scans when there are none", async () => {
+  it("says there are no earlier results when there are none", async () => {
     spies();
     const { user } = await renderPanel();
     await openPanel(user);
-    expect(screen.getByRole("heading", { level: 3, name: "Earlier scans" })).toBeVisible();
-    expect(screen.getByText("No earlier scans.")).toBeVisible();
+    expect(screen.getByRole("heading", { level: 3, name: "Earlier results" })).toBeVisible();
+    expect(screen.getByText("No earlier results.")).toBeVisible();
   });
 });
 
@@ -373,7 +373,7 @@ describe("AiPanel: things that go wrong", () => {
     api.estimate.mockResolvedValue(makeEstimate({ available: false }));
     const { user } = await renderPanel();
     await openPanel(user);
-    expect(screen.getByText("The AI scan is not switched on on this server.")).toBeVisible();
+    expect(screen.getByText("The AI features are not switched on on this server.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Run the scan" })).not.toBeInTheDocument();
   });
 
@@ -389,12 +389,12 @@ describe("AiPanel: things that go wrong", () => {
     expect(screen.queryByRole("button", { name: "Run the scan" })).not.toBeInTheDocument();
   });
 
-  it("disables Run, and says why, when the text is too long for one scan", async () => {
+  it("disables Run, and says why, when the text is too long for one go", async () => {
     const api = spies();
     api.estimate.mockResolvedValue(makeEstimate({ fits: false }));
     const { user } = await renderPanel();
     await openPanel(user);
-    expect(screen.getByText(/This text is too long for one scan/)).toBeVisible();
+    expect(screen.getByText(/This text is too long for the AI to read in one go/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Run the scan" })).toBeDisabled();
   });
 
@@ -415,11 +415,11 @@ describe("AiPanel: things that go wrong", () => {
     api.list.mockRejectedValueOnce(apiError(500));
     const { user } = await renderPanel();
     await openPanel(user);
-    expect(screen.getByText("Could not load your earlier scans.")).toBeVisible();
+    expect(screen.getByText("Could not load your earlier results.")).toBeVisible();
 
     await user.click(screen.getAllByRole("button", { name: "Try again" })[0] as HTMLElement);
     await flush();
-    expect(screen.getByText("No earlier scans.")).toBeVisible();
+    expect(screen.getByText("No earlier results.")).toBeVisible();
   });
 
   it("can still run a scan when the estimate failed", async () => {
@@ -433,7 +433,7 @@ describe("AiPanel: things that go wrong", () => {
   });
 });
 
-describe("AiPanel: earlier scans", () => {
+describe("AiPanel: earlier results", () => {
   const OLD = makeSucceeded([makeFinding({ title: "An old problem" })], {
     scope: "document",
     documentId: "doc-1",
@@ -508,11 +508,11 @@ describe("AiPanel: earlier scans", () => {
     await flush();
 
     expect(api.remove).toHaveBeenCalledWith("project-1", OLD.id);
-    expect(screen.getByText("No earlier scans.")).toBeVisible();
-    expect(screen.getByRole("heading", { level: 3, name: "Earlier scans" })).toHaveFocus();
+    expect(screen.getByText("No earlier results.")).toBeVisible();
+    expect(screen.getByRole("heading", { level: 3, name: "Earlier results" })).toHaveFocus();
   });
 
-  it("shows older scans when there are more", async () => {
+  it("shows older results when there are more", async () => {
     const api = spies();
     const older = makeSucceeded([], { scope: "document", documentId: "doc-2" });
     api.list.mockResolvedValue(page([OLD], "cursor-2"));
@@ -520,13 +520,13 @@ describe("AiPanel: earlier scans", () => {
     await openPanel(user);
 
     api.list.mockResolvedValue(page([older], null));
-    await user.click(screen.getByRole("button", { name: "Show older scans" }));
+    await user.click(screen.getByRole("button", { name: "Show older results" }));
     await flush();
 
     expect(
       screen.getAllByRole("listitem").filter((item) => item.classList.contains("ai-panel__run")),
     ).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: "Show older scans" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show older results" })).not.toBeInTheDocument();
   });
 
   it("shows a deleted item's scan as that, and a very long title in full", async () => {
@@ -560,7 +560,7 @@ describe("AiPanel: accessibility", () => {
     });
     await expectNoA11yViolations(container);
 
-    await user.click(screen.getByRole("button", { name: /Plot-hole finder/ }));
+    await user.click(screen.getByRole("button", { name: /AI assistant/ }));
     await screen.findAllByRole("button", { name: /^Open the scan of/ });
     await expectNoA11yViolations(container);
   });
@@ -571,7 +571,7 @@ describe("AiPanel: accessibility", () => {
       page([makeSucceeded([makeFinding(), makeFinding({ severity: "minor" })])]),
     );
     const { user, container } = await renderPanel();
-    await user.click(screen.getByRole("button", { name: /Plot-hole finder/ }));
+    await user.click(screen.getByRole("button", { name: /AI assistant/ }));
     await user.click(await screen.findByRole("button", { name: /^Open the scan of/ }));
     await screen.findByRole("heading", { level: 3, name: /^Scan of/ });
     await expectNoA11yViolations(container);
@@ -587,7 +587,7 @@ describe("AiPanel: accessibility", () => {
     api.list.mockResolvedValue(page([running]));
     api.get.mockResolvedValue(running);
     const { user, container } = await renderPanel();
-    await user.click(screen.getByRole("button", { name: /Plot-hole finder/ }));
+    await user.click(screen.getByRole("button", { name: /AI assistant/ }));
     await screen.findByRole("progressbar");
     await expectNoA11yViolations(container);
 
