@@ -3,6 +3,7 @@ import { useAuth } from "../../../lib/auth/session.tsx";
 import { usePageTitle } from "../../../lib/navigation/use-page-title.ts";
 import { ButtonLink } from "../../atoms/ButtonLink/ButtonLink.tsx";
 import { PageHeading } from "../../atoms/PageHeading/PageHeading.tsx";
+import { ThemeSwitch } from "../../molecules/ThemeSwitch/ThemeSwitch.tsx";
 import "./HomePage.css";
 
 /** The landing page. What it offers depends on whether someone is signed in. */
@@ -12,6 +13,9 @@ export function HomePage(): ReactElement {
 
   return (
     <main id="main-content" className="home-page">
+      <div className="home-page__tools">
+        <ThemeSwitch />
+      </div>
       <PageHeading>Plotpal</PageHeading>
       <p className="home-page__tagline">Write your story. Let AI catch what you missed.</p>
       {/* While the app still checks for a login, no action is offered: it would flicker. */}

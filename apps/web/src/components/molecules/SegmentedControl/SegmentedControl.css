@@ -1,0 +1,101 @@
+.segmented {
+  /* A fieldset has a minimum width of its content by default, which breaks narrow screens. */
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.segmented__legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-weight: 650;
+}
+
+.segmented__track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--count), minmax(0, 1fr));
+  padding: 4px;
+  border-radius: calc(var(--radius-1) + 4px);
+  background: var(--color-surface-2);
+}
+
+/* The marker. It sits behind the labels and slides from one option to the next. */
+.segmented__thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / var(--count));
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-1);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  transform: translateX(calc(var(--index) * 100%));
+  transition: transform var(--duration-medium) var(--ease-out);
+}
+
+.segmented__track[data-empty="true"] .segmented__thumb {
+  visibility: hidden;
+}
+
+.segmented__option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-target);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-1);
+  color: var(--color-text-muted);
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: color var(--duration-fast);
+}
+
+.segmented__option:hover {
+  color: var(--color-text);
+}
+
+.segmented__option:has(:checked) {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.segmented__option:has(:focus-visible) {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* The radio button is the real control (keyboard, screen reader, form) and covers its option, so
+   it takes the click itself. It is see-through: the option under it draws the look. */
+.segmented__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segmented:disabled .segmented__input {
+  cursor: not-allowed;
+}
+
+.segmented:disabled .segmented__option {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* In forced-colours mode (Windows high contrast) backgrounds vanish: keep the marker visible. */
+@media (forced-colors: active) {
+  .segmented__thumb {
+    border-color: Highlight;
+  }
+}

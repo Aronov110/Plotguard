@@ -1,25 +1,47 @@
-/* Design tokens (Atomic Design "ions"). Components read these; they never hard-code colors. */
+/* Design tokens (Atomic Design "ions"). Components read these; they never hard-code colors.
+ *
+ * Light colors are warm paper; dark colors are midnight. Three blocks hold the colors:
+ *   1. :root                                      the light colors (and the default)
+ *   2. @media dark, :root:not([data-theme=light]) the dark colors when the system prefers dark,
+ *                                                  unless the person chose light
+ *   3. :root[data-theme="dark"]                    the same dark colors for a person who chose dark
+ * tokens.test.ts checks the contrast of every pair in all three, and that blocks 2 and 3 are equal.
+ * Keep them equal by hand: CSS has no way to share one block between a media query and a selector.
+ */
 
 :root {
   color-scheme: light dark;
 
-  /* Light theme: warm paper feel */
-  --color-bg: #faf7f2;
+  --color-bg: #f7f2e9;
   --color-surface: #ffffff;
-  --color-text: #1f1b16;
-  --color-text-muted: #5c5348;
-  --color-accent: #7a3e12;
+  /* A raised or tinted area: a segmented control, a note, a skeleton. */
+  --color-surface-2: #f1eadf;
+  --color-text: #2b2118;
+  --color-text-muted: #6a5b4a;
+  --color-accent: #8a4b1f;
+  --color-accent-strong: #6f3a14;
   --color-on-accent: #ffffff;
+  /* The tint of a selected or hovered item. Text on it is accent-strong or text. */
+  --color-accent-soft: #f4e7d9;
   --color-focus: #0b57d0;
+  /* The edge of a field or a button: strong enough to be seen (WCAG 1.4.11, 3:1). */
   --color-border: #7d7266;
+  /* A faint line between areas. Decoration only: never the edge of something to press or type in. */
+  --color-divider: #ddd0be;
   --color-danger: #b3261e;
   --color-on-danger: #ffffff;
   --color-danger-bg: #fdecea;
-  --color-success: #1b6a38;
-  --color-success-bg: #e6f4ea;
+  --color-success: #1e6b3c;
+  --color-success-bg: #e4f2e8;
 
-  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-writing: "Courier New", Courier, monospace;
+  --shadow-1: 0 1px 2px rgb(60 40 20 / 8%), 0 8px 16px -10px rgb(60 40 20 / 25%);
+  --shadow-2: 0 1px 2px rgb(60 40 20 / 6%), 0 14px 34px -14px rgb(60 40 20 / 20%);
+  /* The soft halo around a focused field, next to the focus ring. */
+  --ring-soft: rgb(138 75 31 / 18%);
+
+  --font-ui: "DM Sans Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-head: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-writing: "Newsreader Variable", Georgia, "Times New Roman", serif;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -27,28 +49,75 @@
   --space-4: 1.5rem;
   --space-5: 2.5rem;
 
-  --radius-1: 0.375rem;
+  --radius-1: 0.75rem;
+  --radius-2: 1.125rem;
 
   /* The smallest height of anything you press or tap (WCAG 2.5.8 asks for 24px; 44px is easier). */
   --size-target: 2.75rem;
+
+  /* Motion: short, and always switched off for people who ask for less movement (see below). */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 0.15s;
+  --duration-medium: 0.3s;
+  --duration-slow: 0.5s;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #16130f;
-    --color-surface: #1f1b16;
-    --color-text: #f2ece3;
-    --color-text-muted: #b8ad9e;
-    --color-accent: #e0a36b;
-    --color-on-accent: #16130f;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --color-bg: #0e1117;
+    --color-surface: #161b26;
+    --color-surface-2: #1e2535;
+    --color-text: #ece8df;
+    --color-text-muted: #a4abbb;
+    --color-accent: #f0b35a;
+    --color-accent-strong: #f6c77f;
+    --color-on-accent: #1a1303;
+    --color-accent-soft: #33302e;
     --color-focus: #8ab4f8;
-    --color-border: #8f8576;
+    --color-border: #7a8398;
+    --color-divider: #2b3345;
     --color-danger: #f4a6a0;
-    --color-on-danger: #16130f;
-    --color-danger-bg: #3a1b19;
-    --color-success: #8fd3a4;
-    --color-success-bg: #16301f;
+    --color-on-danger: #0e1117;
+    --color-danger-bg: #3a1e21;
+    --color-success: #7fd39a;
+    --color-success-bg: #17301f;
+
+    --shadow-1: 0 8px 22px -10px rgb(0 0 0 / 70%);
+    --shadow-2: 0 24px 60px -24px rgb(0 0 0 / 70%);
+    --ring-soft: rgb(240 179 90 / 22%);
   }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0e1117;
+  --color-surface: #161b26;
+  --color-surface-2: #1e2535;
+  --color-text: #ece8df;
+  --color-text-muted: #a4abbb;
+  --color-accent: #f0b35a;
+  --color-accent-strong: #f6c77f;
+  --color-on-accent: #1a1303;
+  --color-accent-soft: #33302e;
+  --color-focus: #8ab4f8;
+  --color-border: #7a8398;
+  --color-divider: #2b3345;
+  --color-danger: #f4a6a0;
+  --color-on-danger: #0e1117;
+  --color-danger-bg: #3a1e21;
+  --color-success: #7fd39a;
+  --color-success-bg: #17301f;
+
+  --shadow-1: 0 8px 22px -10px rgb(0 0 0 / 70%);
+  --shadow-2: 0 24px 60px -24px rgb(0 0 0 / 70%);
+  --ring-soft: rgb(240 179 90 / 22%);
 }
 
 /* Text for screen readers only: out of sight, but still read aloud and still in the page. */
@@ -76,6 +145,13 @@ body {
   color: var(--color-text);
   font-family: var(--font-ui);
   line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-head);
+  letter-spacing: -0.01em;
 }
 
 a {

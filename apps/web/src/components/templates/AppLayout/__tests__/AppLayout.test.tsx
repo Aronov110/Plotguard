@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -97,5 +97,28 @@ describe("AppLayout", () => {
   it("has no accessibility violations as a page", async () => {
     await renderLayout();
     await expectNoPageA11yViolations();
+  });
+
+  describe("the colour theme", () => {
+    it("offers a choice of system, light and dark in the header", async () => {
+      await renderLayout();
+      const header = screen.getByRole("banner");
+      const group = within(header).getByRole("group", { name: "Colour theme" });
+      expect(within(group).getAllByRole("radio")).toHaveLength(3);
+    });
+
+    it("puts the chosen theme on the page", async () => {
+      await renderLayout();
+      await userEvent.click(screen.getByRole("radio", { name: "Dark" }));
+      expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+      document.documentElement.removeAttribute("data-theme");
+      window.localStorage.clear();
+    });
+  });
+
+  it("shows the logo mark without adding to the name of the home link", async () => {
+    await renderLayout();
+    const link = screen.getByRole("link", { name: "Plotpal" });
+    expect(link.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
   });
 });

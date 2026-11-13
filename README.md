@@ -95,6 +95,27 @@ the question opens with the focus on "Keep project", and Escape keeps the projec
 has no version check, so if two tabs change the same project the last save wins. A project's title
 opens its writing screen.
 
+### Look and feel
+
+- **Colours.** `apps/web/src/components/ions/tokens.css` holds every colour, size and motion value as a
+  CSS variable; components read them and never hard-code a colour. Light is a warm paper palette,
+  dark is midnight. The page follows the system's setting by default. A **System / Light / Dark**
+  switch (header, login, sign-up and home screens) overrides it: the choice is one word,
+  `plotpal-theme`, in `localStorage` (a preference, never a token), and `public/theme-init.js` puts it
+  on the page before the first paint, so there is no flash of the wrong colours. The dark colours are
+  written twice (for a dark system and for a chosen dark): `tokens.test.ts` checks the contrast of
+  every colour pair in all three blocks, and that the two dark blocks are equal.
+- **Edges and dividers.** `--color-border` is strong enough to see (3:1, WCAG 1.4.11) and is for fields
+  and buttons; `--color-divider` is a faint decoration for lines between areas and never the edge of
+  something to type in or press.
+- **Fonts.** Newsreader (headings, the writing area) and DM Sans (the interface), as variable fonts
+  from the `@fontsource-variable` packages, served by this app itself: no request goes to another
+  site. A normal English page loads about 95 KB of fonts.
+- **Motion.** Short transitions (150 to 500 ms) from the `--duration-*` and `--ease-out` tokens. A
+  system setting for less motion switches all of them off (`prefers-reduced-motion`).
+- **Building blocks.** `Icon` (a small set of outline icons, decoration only), `SegmentedControl` (a
+  choice of a few with a sliding marker; real radio buttons underneath) and `ThemeSwitch`.
+
 ### The writing screen
 
 `/app/projects/<project id>?document=<document id>`: the project's outline (acts, chapters and the
