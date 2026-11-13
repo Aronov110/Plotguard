@@ -1,0 +1,54 @@
+/* The box. The page decides how wide or tall it is and how it opens (see WritingPage.css); this only
+   keeps what is inside from spilling out or being reached while the panel is closed. */
+.drawer {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Closed: gone for the eye as well, for browsers that do not know `inert`. Hidden at the end of the
+   closing slide, shown at the start of the opening one. */
+.drawer[data-open="false"] {
+  visibility: hidden;
+  transition: visibility 0s var(--duration-slow);
+}
+
+.drawer[data-open="true"] {
+  visibility: visible;
+  transition: visibility 0s;
+}
+
+.drawer__inner {
+  /* A fixed width, so the contents do not re-wrap while the column grows or shrinks around them. */
+  width: var(--drawer-width, 100%);
+  max-width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-2);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-2);
+}
+
+.drawer__top {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.drawer__title {
+  margin: 0;
+  min-width: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.drawer__title:focus {
+  outline: none;
+}
+
+.drawer__title:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}

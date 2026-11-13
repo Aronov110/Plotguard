@@ -22,6 +22,11 @@ import "./AiPanel.css";
 
 export interface AiPanelProps {
   readonly projectId: string;
+  /**
+   * Whether the panel is shown (the screen's drawer is open). Nothing is loaded until it has been
+   * open once, and a run that is going keeps going while it is closed.
+   */
+  readonly open: boolean;
   /** The item that is open on the writing screen, if any. */
   readonly openItem: { readonly id: string; readonly title: string } | undefined;
   /** The title of every item in the outline, by id: links and names in results use it. */
@@ -87,17 +92,22 @@ function Progress({ analysis, trouble }: { analysis: Analysis; trouble: boolean 
 }
 
 /**
- * The AI assistant on the writing screen: a collapsed section that opens to a choice of what the AI
- * should do (find plot holes, or suggest ideas), what to read, the cost, the privacy notice with the
- * Run button, the progress, the result, and the earlier results. Nothing is loaded until the panel is
- * first opened. The choice is locked while a run goes, and a run found going when the page opens
- * shows its own kind, whatever was chosen.
+ * The AI assistant on the writing screen, as the contents of the screen's drawer (which supplies the
+ * heading and the Close button): a choice of what the AI should do (find plot holes, or suggest
+ * ideas), what to read, the cost, the privacy notice with the Run button, the progress, the result,
+ * and the earlier results. Nothing is loaded until the panel has been open once, and it stays in the
+ * page when closed so that a run goes on. The choice is locked while a run goes, and a run found
+ * going when the page opens shows its own kind, whatever was chosen.
  */
-export function AiPanel({ projectId, openItem, titles, onOpenItem }: AiPanelProps): ReactElement {
+export function AiPanel({
+  projectId,
+  open,
+  openItem,
+  titles,
+  onOpenItem,
+}: AiPanelProps): ReactElement {
   const ids = useId();
-  const regionId = `${ids}-region`;
   const privacyId = `${ids}-privacy`;
-  const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState<ScopeValue | undefined>(undefined);
   const [mode, setMode] = useState<AnalysisKind>("plot_holes");
   const [focus, setFocus] = useState("");
@@ -116,7 +126,10 @@ export function AiPanel({ projectId, openItem, titles, onOpenItem }: AiPanelProp
     [scope, openItemId],
   );
 
-  const panel = useAnalysisPanel({ projectId, target, enabled: open, kind: mode, focus });
+  // Once opened, the panel keeps loading and polling whether it is shown or not.
+  const [everOpened, setEverOpened] = useState(open);
+  if (open && !everOpened) setEverOpened(true);
+  const panel = useAnalysisPanel({ projectId, target, enabled: everOpened, kind: mode, focus });
   const { run, estimate, history, problem } = panel;
   const busy = run.phase === "starting" || run.phase === "running";
   // A run that is going (perhaps found again after a reload) decides what the panel shows.
@@ -159,23 +172,8 @@ export function AiPanel({ projectId, openItem, titles, onOpenItem }: AiPanelProp
   const announcement = panel.announcement;
 
   return (
-    <section className="ai-panel" aria-labelledby={`${ids}-heading`}>
-      <h2 id={`${ids}-heading`} className="ai-panel__heading">
-        <button
-          type="button"
-          className="ai-panel__toggle"
-          aria-expanded={open}
-          aria-controls={regionId}
-          onClick={() => {
-            setOpen((previous) => !previous);
-          }}
-        >
-          <span>AI assistant</span>
-          <span aria-hidden="true">{open ? "Hide" : "Show"}</span>
-        </button>
-      </h2>
-
-      <div id={regionId} hidden={!open} className="ai-panel__body">
+    <div className="ai-panel">
+      <div className="ai-panel__body">
         <p className="ai-panel__intro">
           An AI reads your story. It can point out places where the story contradicts itself or
           leaves something unexplained, or suggest ideas for where it could go next.
@@ -327,6 +325,6 @@ export function AiPanel({ projectId, openItem, titles, onOpenItem }: AiPanelProp
           ? ""
           : announcement.text + (announcement.serial % 2 === 0 ? " " : "")}
       </p>
-    </section>
+    </div>
   );
 }

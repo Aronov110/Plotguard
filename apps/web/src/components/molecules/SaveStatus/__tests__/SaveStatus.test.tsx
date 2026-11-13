@@ -75,3 +75,39 @@ describe("SaveStatus: accessibility", () => {
     await expectNoA11yViolations(container);
   });
 });
+
+describe("SaveStatus: the pill", () => {
+  it.each([
+    [{ kind: "saved" }, "save-status--saved"],
+    [{ kind: "unsaved" }, "save-status--unsaved"],
+    [{ kind: "saving" }, "save-status--saving"],
+    [{ kind: "conflict" }, "save-status--problem"],
+  ] as const)(
+    "shows %j with its own look and a picture hidden from screen readers",
+    (status, className) => {
+      const { container } = render(<SaveStatus status={status} />);
+      const pill = container.firstElementChild;
+      expect(pill).toHaveClass("save-status", className);
+      const picture = pill?.querySelector("svg, .save-status__dot, .save-status__spinner");
+      expect(picture).not.toBeNull();
+      expect(picture).toHaveAttribute("aria-hidden", "true");
+    },
+  );
+
+  it("puts the words in their own element, so that they stay the name of the state", () => {
+    render(<SaveStatus status={{ kind: "saved" }} />);
+    expect(screen.getByText("Saved").tagName).toBe("SPAN");
+  });
+
+  it("adds no words of its own for the picture", () => {
+    const { container } = render(<SaveStatus status={{ kind: "saving" }} />);
+    expect(container).toHaveTextContent(/^Saving…$/);
+  });
+
+  it("shows a problem as a box with the picture beside the words, still announced", () => {
+    render(<SaveStatus status={{ kind: "retrying", message: "Try later." }} />);
+    const alert = screen.getByRole("alert");
+    expect(alert.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(alert).toHaveTextContent("Not saved. Try later.");
+  });
+});

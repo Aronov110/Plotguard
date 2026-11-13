@@ -6,6 +6,7 @@ import { analysesApi } from "../../../../lib/api/analyses-api.ts";
 import { ApiError } from "../../../../lib/api/problem.ts";
 import { AuthProvider } from "../../../../lib/auth/session.tsx";
 import { expectNoA11yViolations } from "../../../../test-support/a11y.ts";
+import { AiPanelHarness } from "../../../../test-support/ai-panel-harness.tsx";
 import {
   makeAnalysis,
   makeEstimate,
@@ -17,7 +18,7 @@ import {
   page,
 } from "../../../../test-support/analyses-handlers.ts";
 import { signedInManager } from "../../../../test-support/signed-in-manager.ts";
-import { AiPanel, type AiPanelProps } from "../AiPanel.tsx";
+import type { AiPanelProps } from "../AiPanel.tsx";
 
 // The idea generator in the panel. The plot-hole behaviour is in AiPanel.test.tsx.
 
@@ -45,7 +46,7 @@ async function renderPanel(props: Partial<AiPanelProps> = {}) {
   const view = render(
     <AuthProvider manager={context.manager}>
       <MemoryRouter initialEntries={["/app/projects/project-1/write"]}>
-        <AiPanel
+        <AiPanelHarness
           projectId="project-1"
           openItem={undefined}
           titles={TITLES}
@@ -92,11 +93,10 @@ afterEach(() => {
 });
 
 describe("AiPanel: choosing what the AI does", () => {
-  it("is called the AI assistant and offers plot holes first, with no focus field", async () => {
+  it("offers plot holes first, with no focus field", async () => {
     spies();
     const { user } = await renderPanel();
     await openPanel(user);
-    expect(screen.getByRole("heading", { level: 2, name: /AI assistant/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Find plot holes" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "Get ideas" })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Run the scan" })).toBeInTheDocument();

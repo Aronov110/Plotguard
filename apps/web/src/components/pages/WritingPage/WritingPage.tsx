@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { DocumentDetail } from "../../../lib/api/documents-api.ts";
 import { findNode, type OutlineNode, useOutline } from "../../../lib/documents/use-outline.ts";
@@ -6,11 +6,13 @@ import { usePageTitle } from "../../../lib/navigation/use-page-title.ts";
 import { useProject } from "../../../lib/projects/use-project.ts";
 import { Button } from "../../atoms/Button/Button.tsx";
 import { PageHeading } from "../../atoms/PageHeading/PageHeading.tsx";
+import { Drawer } from "../../molecules/Drawer/Drawer.tsx";
 import { ErrorSummary } from "../../molecules/ErrorSummary/ErrorSummary.tsx";
 import { AddItemForm } from "../../organisms/AddItemForm/AddItemForm.tsx";
 import { AiPanel } from "../../organisms/AiPanel/AiPanel.tsx";
 import { DocumentEditor } from "../../organisms/DocumentEditor/DocumentEditor.tsx";
 import { OutlineNav } from "../../organisms/OutlineNav/OutlineNav.tsx";
+import { ProjectBar } from "../../organisms/ProjectBar/ProjectBar.tsx";
 import { AppLayout } from "../../templates/AppLayout/AppLayout.tsx";
 import "./WritingPage.css";
 
@@ -25,9 +27,11 @@ function titlesOf(nodes: readonly OutlineNode[]): ReadonlyMap<string, string> {
 }
 
 /**
- * The writing screen of one project: its outline beside the text of the open item. The open item is
- * in the address (`?document=<id>`), so Back works and a link leads straight to a scene. Choosing an
- * item, or adding one, moves the focus into its text.
+ * The writing screen of one project: its outline beside the text of the open item, and the AI
+ * assistant in a drawer on the other side. The outline and the drawer each open and close with a
+ * button in the bar at the top. The open item is in the address (`?document=<id>`), so Back works
+ * and a link leads straight to a scene. Choosing an item, or adding one, moves the focus into its
+ * text.
  */
 export function WritingPage(): ReactElement {
   const { projectId = "" } = useParams();
@@ -42,6 +46,23 @@ export function WritingPage(): ReactElement {
   // changes nothing else on the screen, so the text is told to take the focus by this number.
   const [focusSignal, setFocusSignal] = useState(0);
   const outlineHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  // The outline starts open and the AI drawer starts closed. Neither is remembered: only the colour
+  // theme is kept between visits.
+  const [outlineOpen, setOutlineOpen] = useState(true);
+  const [aiOpen, setAiOpen] = useState(false);
+  const aiToggleRef = useRef<HTMLButtonElement | null>(null);
+  const panelIds = useId();
+  const outlineId = `${panelIds}-outline`;
+  const aiId = `${panelIds}-ai`;
+  // A deleted item leaves the focus nowhere; it goes to the outline's heading, which has to be open
+  // for that. If it was closed it is opened first, and the focus follows once it can take it.
+  const focusOutlineWhenOpen = useRef(false);
+  useEffect(() => {
+    if (outlineOpen && focusOutlineWhenOpen.current) {
+      focusOutlineWhenOpen.current = false;
+      outlineHeadingRef.current?.focus();
+    }
+  }, [outlineOpen]);
   // What a screen reader is told after a rename, a move or a delete. It is kept here, not in the
   // toolbar, because a deleted item takes its toolbar away with it.
   const [announcement, setAnnouncement] = useState({ text: "", serial: 0 });
@@ -86,7 +107,12 @@ export function WritingPage(): ReactElement {
   const handleDeleted = (): void => {
     setChosenId(undefined);
     setSearchParams({}, { replace: true });
-    outlineHeadingRef.current?.focus();
+    if (outlineOpen) {
+      outlineHeadingRef.current?.focus();
+    } else {
+      focusOutlineWhenOpen.current = true;
+      setOutlineOpen(true);
+    }
   };
 
   // A link in an AI finding opens its item (the link changes the address). The text of an item that
@@ -173,18 +199,56 @@ export function WritingPage(): ReactElement {
 
   return (
     <AppLayout wide>
-      {back}
-      <PageHeading>{project.project.title}</PageHeading>
-      <div className="writing-page__panes">
-        <div className="writing-page__side">{side}</div>
-        <div className="writing-page__text">{text}</div>
-      </div>
-      <AiPanel
-        projectId={projectId}
-        openItem={open === undefined ? undefined : { id: open.node.id, title: open.node.title }}
-        titles={titles}
-        onOpenItem={handleFindingLink}
+      <ProjectBar
+        title={project.project.title}
+        outlineOpen={outlineOpen}
+        outlineId={outlineId}
+        onToggleOutline={() => {
+          setOutlineOpen((previous) => !previous);
+        }}
+        aiOpen={aiOpen}
+        aiId={aiId}
+        onToggleAi={() => {
+          setAiOpen((previous) => !previous);
+        }}
+        aiToggleRef={aiToggleRef}
       />
+      <div
+        className="writing-page__panes"
+        data-outline={outlineOpen ? "open" : "closed"}
+        data-ai={aiOpen ? "open" : "closed"}
+      >
+        <div
+          id={outlineId}
+          className="writing-page__side"
+          data-open={outlineOpen ? "true" : "false"}
+          inert={!outlineOpen}
+        >
+          <div className="writing-page__side-inner">{side}</div>
+        </div>
+        <div className="writing-page__text">{text}</div>
+        <div className="writing-page__ai">
+          <Drawer
+            id={aiId}
+            open={aiOpen}
+            title="AI assistant"
+            returnFocusRef={aiToggleRef}
+            onClose={() => {
+              setAiOpen(false);
+            }}
+          >
+            <AiPanel
+              projectId={projectId}
+              open={aiOpen}
+              openItem={
+                open === undefined ? undefined : { id: open.node.id, title: open.node.title }
+              }
+              titles={titles}
+              onOpenItem={handleFindingLink}
+            />
+          </Drawer>
+        </div>
+      </div>
       {/* Always in the page, so that a screen reader is already listening when its text changes. */}
       <p role="status" className="visually-hidden">
         {announcement.text === ""

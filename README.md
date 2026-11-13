@@ -119,16 +119,32 @@ opens its writing screen.
 ### The writing screen
 
 `/app/projects/<project id>?document=<document id>`: the project's outline (acts, chapters and the
-scenes inside them) beside the text of the open item. The open item is in the query string, so Back
-works and a link leads straight to a scene; choosing or adding an item moves the focus into its text.
-"Add to the outline" adds an act or chapter at the top level, or a scene inside the open act (one
-level of nesting).
+scenes inside them) beside the text of the open item, and the AI assistant in a drawer on the other
+side. The open item is in the query string, so Back works and a link leads straight to a scene;
+choosing or adding an item moves the focus into its text. "Add to the outline" adds an act or chapter
+at the top level, or a scene inside the open act (one level of nesting).
+
+- **The bar at the top** has the way back, the project's title (the screen's level-one heading) and two
+  buttons, **Outline** and **AI assistant**, each with `aria-expanded` and `aria-controls`. The
+  outline starts open and the drawer starts closed; neither is remembered between visits.
+- **Three columns** on a screen at least 60 rem wide (outline, text, drawer): the outer two grow from
+  nothing, so the text column gives way smoothly, and the drawer stays in view while the page scrolls.
+  On a narrower screen it is one column and the outline and the drawer open by height, with the drawer
+  _below_ the text (no overlay, no focus trap, nothing scrolls sideways at 320 px).
+- **The drawer is a labelled landmark, not a dialog** (`Drawer`): opening it moves the focus to its
+  heading; Close or Escape from inside shuts it and puts the focus back on its button. Closed, it (and
+  the outline panel) is `inert` and hidden, so it cannot be tabbed to, but its contents stay in the
+  page, so an AI run goes on while it is closed. Deleting the open item while the outline is closed
+  opens the outline again and puts the focus on its heading.
+- **The text sits on a paper** with a strong thin edge (so the writing area can be found, WCAG 1.4.11)
+  that turns to the accent, with a soft halo, while the text has the focus.
 
 - **The text is a plain box**, kept exactly as typed (spaces, line breaks, emoji, any language). The
   box itself holds the text, not React, so a very long text (up to 200,000 characters) does not
   re-render on every key.
 - **It saves by itself** 2 seconds after the last keystroke, when the box or the document is left,
-  and at once with Ctrl or Cmd + S. The status line says "Saved", "Unsaved changes" or "Saving…". Text
+  and at once with Ctrl or Cmd + S. The status pill says "Saved" (the check draws itself), "Unsaved
+  changes" or "Saving…" (a spinner), in words, and never announces these calm states. Text
   typed through an input method (Chinese, Japanese, Korean) is saved after the character is finished.
 - **A failed save is retried** after 5, 10, 20, 40 and then every 60 seconds (or as long as the
   server says after "too many requests"); the text stays in the box and the status line says why.
@@ -343,8 +359,9 @@ someone else is answered with 404, exactly like one that does not exist. Every a
 
 ### The panel on the writing screen
 
-Under the outline and the text there is a collapsed "AI assistant" section (a heading with one
-disclosure button). Nothing is loaded until it is first opened.
+The AI assistant is the contents of the writing screen's drawer (see above): its heading and Close
+button belong to the `Drawer`, and `AiPanel` takes an `open` prop. Nothing is loaded until the drawer
+has been open once, and a run goes on while it is closed.
 
 - **Choosing and running.** A radio group asks "What do you want?": "Find plot holes" or "Get
   ideas". It is locked while a run goes, and a run found going when the page opens decides what the
