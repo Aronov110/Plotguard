@@ -144,4 +144,89 @@ describe("SegmentedControl", () => {
     const { container } = renderControl();
     await expectNoA11yViolations(container);
   });
+
+  describe("the hint of the chosen option", () => {
+    const WITH_HINTS: readonly SegmentedOption<Mode>[] = [
+      { value: "plot_holes", label: "Find plot holes", hint: "Points out contradictions." },
+      { value: "ideas", label: "Get ideas", hint: "Suggests where the story could go." },
+    ];
+
+    it("shows the chosen option's hint under the control and ties it to the group", () => {
+      render(
+        <SegmentedControl<Mode>
+          legend="What do you want?"
+          options={WITH_HINTS}
+          value="ideas"
+          onChange={() => undefined}
+        />,
+      );
+      const group = screen.getByRole("group", { name: "What do you want?" });
+      expect(group).toHaveAccessibleDescription("Suggests where the story could go.");
+      expect(screen.queryByText("Points out contradictions.")).not.toBeInTheDocument();
+    });
+
+    it("follows the choice", () => {
+      const { rerender } = render(
+        <SegmentedControl<Mode>
+          legend="What do you want?"
+          options={WITH_HINTS}
+          value="plot_holes"
+          onChange={() => undefined}
+        />,
+      );
+      expect(screen.getByText("Points out contradictions.")).toBeInTheDocument();
+      rerender(
+        <SegmentedControl<Mode>
+          legend="What do you want?"
+          options={WITH_HINTS}
+          value="ideas"
+          onChange={() => undefined}
+        />,
+      );
+      expect(screen.getByText("Suggests where the story could go.")).toBeInTheDocument();
+      expect(screen.queryByText("Points out contradictions.")).not.toBeInTheDocument();
+    });
+
+    it("is not announced as the choice changes: it is not a live region", () => {
+      render(
+        <SegmentedControl<Mode>
+          legend="What do you want?"
+          options={WITH_HINTS}
+          value="ideas"
+          onChange={() => undefined}
+        />,
+      );
+      expect(screen.getByText("Suggests where the story could go.")).not.toHaveAttribute("role");
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+
+    it("shows nothing for an option without a hint, or for a value among no option", () => {
+      const { container, rerender } = renderControl({ value: "plot_holes" });
+      expect(container.querySelector(".segmented__hint")).toBeNull();
+      expect(screen.getByRole("group")).not.toHaveAttribute("aria-describedby");
+      rerender(
+        <SegmentedControl<Mode>
+          legend="What do you want?"
+          options={WITH_HINTS}
+          value="other"
+          onChange={() => undefined}
+        />,
+      );
+      expect(container.querySelector(".segmented__hint")).toBeNull();
+    });
+
+    it("shows the hint as plain text", () => {
+      const { container } = render(
+        <SegmentedControl<Mode>
+          legend="What do you want?"
+          options={[
+            { value: "ideas", label: "Get ideas", hint: "<b>bold</b><script>x()</script>" },
+          ]}
+          value="ideas"
+          onChange={() => undefined}
+        />,
+      );
+      expect(container.querySelector("b, script")).toBeNull();
+    });
+  });
 });

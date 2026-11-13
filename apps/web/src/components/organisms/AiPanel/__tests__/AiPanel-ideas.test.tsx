@@ -497,3 +497,34 @@ describe("AiPanel, ideas: accessibility", () => {
     await expectNoA11yViolations(container);
   });
 });
+
+describe("AiPanel: the mode control", () => {
+  it("is a group of two radio buttons with the explanation of the chosen mode under it", async () => {
+    spies();
+    const { user } = await renderPanel();
+    await openPanel(user);
+    const group = screen.getByRole("group", { name: "What do you want?" });
+    expect(within(group).getAllByRole("radio")).toHaveLength(2);
+    expect(group).toHaveAccessibleDescription(/contradicts itself/);
+  });
+
+  it("changes the explanation with the choice", async () => {
+    spies();
+    const { user } = await renderPanel();
+    await openPanel(user);
+    await chooseIdeas(user);
+    const group = screen.getByRole("group", { name: "What do you want?" });
+    expect(group).toHaveAccessibleDescription(/suggestions, not corrections/);
+    // (The panel's own intro also says "contradicts itself", so only the group's description is read.)
+    expect(group).not.toHaveAccessibleDescription(/contradicts itself/);
+  });
+
+  it("offers the scope as two cards that are radio buttons", async () => {
+    spies();
+    const { user } = await renderPanel();
+    await openPanel(user);
+    const group = screen.getByRole("group", { name: "What should it read?" });
+    expect(within(group).getAllByRole("radio")).toHaveLength(2);
+    expect(within(group).getByRole("radio", { name: "The whole project" })).toBeChecked();
+  });
+});

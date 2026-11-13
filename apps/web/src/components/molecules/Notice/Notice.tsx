@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
+import { Icon } from "../../atoms/Icon/Icon.tsx";
 import "./Notice.css";
 
 export interface NoticeProps {
@@ -11,7 +12,10 @@ export interface NoticeProps {
 export function Notice({ tone = "warning", children }: NoticeProps): ReactElement {
   return (
     <div role="status" className={`notice notice--${tone}`}>
-      {children}
+      <span className="notice__icon">
+        <Icon name="alert" />
+      </span>
+      <div className="notice__body">{children}</div>
     </div>
   );
 }

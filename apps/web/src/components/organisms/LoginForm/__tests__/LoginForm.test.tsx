@@ -62,6 +62,21 @@ async function fillAndSubmit(
 
 describe("LoginForm", () => {
   describe("what it shows", () => {
+    it("has a mail icon and a lock icon in its fields, which only decorate", () => {
+      const { container } = renderForm();
+      const icons = [...container.querySelectorAll(".form-field__icon svg")];
+      expect(icons.map((icon) => icon.getAttribute("data-icon"))).toEqual(["mail", "lock"]);
+      for (const icon of icons) expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(screen.getByLabelText("Email")).toBeInTheDocument();
+      expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    });
+
+    it("has the show-password button joined to the password field, with its name unchanged", () => {
+      renderForm();
+      const toggle = screen.getByRole("button", { name: "Show password" });
+      expect(toggle.closest(".form-field__control")).toHaveAttribute("data-joined", "true");
+    });
+
     it("has an email field, a password field and a submit button", () => {
       renderForm();
       expect(screen.getByLabelText("Email")).toBeInTheDocument();

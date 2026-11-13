@@ -1,0 +1,121 @@
+.choice-option {
+  position: relative;
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  min-height: var(--size-target);
+  margin-bottom: var(--space-2);
+  padding: var(--space-3);
+  border: 2px solid var(--color-divider);
+  border-radius: var(--radius-1);
+  background: var(--color-surface);
+  transition:
+    border-color var(--duration-fast),
+    background-color var(--duration-fast),
+    box-shadow var(--duration-medium) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.choice-option:hover:not([data-disabled="true"]) {
+  box-shadow: var(--shadow-1);
+  transform: translateY(-1px);
+}
+
+/* The chosen card: tinted, an accent edge, a filled tick and a heavier label. */
+.choice-option:has(:checked) {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.choice-option:has(:focus-visible) {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* The real radio button, see-through, covering the card: the press goes to it wherever it lands. */
+.choice-option__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.choice-option__tick {
+  border-color: var(--color-divider);
+}
+
+.choice-option__tick {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.1rem;
+  border: 2px solid var(--color-border);
+  border-radius: 50%;
+  color: transparent;
+  transition:
+    background-color var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast),
+    transform var(--duration-medium) var(--ease-out);
+}
+
+.choice-option__tick .icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  stroke-width: 3;
+}
+
+.choice-option:has(:checked) .choice-option__tick {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  transform: scale(1.08);
+}
+
+/* A card that cannot be chosen is flat, dashed and not clickable. It is not dimmed with opacity: its
+   hint often says why it is unavailable, and that explanation has to stay readable (WCAG 1.4.3). */
+.choice-option[data-disabled="true"] {
+  border-style: dashed;
+  background: var(--color-surface-2);
+}
+
+.choice-option[data-disabled="true"] .choice-option__input {
+  cursor: not-allowed;
+}
+
+.choice-option[data-disabled="true"] /* The words may hold a title the person wrote: a very long one must wrap. */
+.choice-option__body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.choice-option__label {
+  display: block;
+  padding-top: 0.1rem;
+}
+
+.choice-option:has(:checked) .choice-option__label {
+  font-weight: 700;
+}
+
+.choice-option__hint {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+}
+
+/* In forced-colours mode (Windows high contrast) the tint vanishes: keep the edge and the tick. */
+@media (forced-colors: active) {
+  .choice-option:has(:checked) {
+    border-color: Highlight;
+  }
+
+  .choice-option:has(:checked) .choice-option__tick {
+    background: Highlight;
+    color: HighlightText;
+  }
+}

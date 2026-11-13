@@ -16,36 +16,3 @@
   margin: 0 0 var(--space-1);
   color: var(--color-text-muted);
 }
-
-.radio-group__option {
-  display: flex;
-  gap: var(--space-2);
-  align-items: flex-start;
-  min-height: var(--size-target);
-  padding: var(--space-1) 0;
-}
-
-/* Bigger than the browser's own circle, so that it is easy to hit (and passes the 24 px minimum). */
-.radio-group__input {
-  flex: none;
-  width: 1.75rem;
-  height: 1.75rem;
-  margin: 0;
-  accent-color: var(--color-accent);
-}
-
-/* The words next to the circle may hold a title the person wrote: a very long one must wrap. */
-.radio-group__option > div {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.radio-group__label {
-  display: block;
-  padding-top: 0.2rem;
-}
-
-.radio-group__option-hint {
-  margin: 0;
-  color: var(--color-text-muted);
-}

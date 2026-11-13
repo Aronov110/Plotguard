@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { InlineError } from "../../atoms/InlineError/InlineError.tsx";
+import { ChoiceOption } from "../ChoiceOption/ChoiceOption.tsx";
 import "./RadioGroupField.css";
 
 export interface RadioOption {
@@ -27,7 +28,7 @@ export interface RadioGroupFieldProps {
 }
 
 /**
- * A choice of one out of a few, as a group of radio buttons under a question. The arrow keys move
+ * A choice of one out of a few, as a group of cards (radio buttons) under a question. The arrow keys move
  * the choice (the browser does that for radio buttons with the same name). Uncontrolled: the form
  * reads the choice when it is sent.
  */
@@ -59,33 +60,17 @@ export function RadioGroupField({
           {hint}
         </p>
       ) : null}
-      {options.map((option) => {
-        const optionId = `${id}-${option.value}`;
-        const optionHintId = `${optionId}-hint`;
-        return (
-          <div key={option.value} className="radio-group__option">
-            <input
-              id={optionId}
-              className="radio-group__input"
-              type="radio"
-              name={name}
-              value={option.value}
-              defaultChecked={option.value === defaultValue}
-              {...(option.hint === undefined ? {} : { "aria-describedby": optionHintId })}
-            />
-            <div>
-              <label htmlFor={optionId} className="radio-group__label">
-                {option.label}
-              </label>
-              {option.hint === undefined ? null : (
-                <p id={optionHintId} className="radio-group__option-hint">
-                  {option.hint}
-                </p>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {options.map((option) => (
+        <ChoiceOption
+          key={option.value}
+          id={`${id}-${option.value}`}
+          name={name}
+          value={option.value}
+          label={option.label}
+          hint={option.hint}
+          defaultChecked={option.value === defaultValue}
+        />
+      ))}
       {hasError ? <InlineError id={errorId}>{error}</InlineError> : null}
     </fieldset>
   );

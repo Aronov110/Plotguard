@@ -89,6 +89,18 @@ const PAIRS: readonly (readonly [string, string, number, string])[] = [
     "text on a tinted accent area (a selected item)",
   ],
   ["color-text", "color-accent-soft", 4.5, "normal text on a tinted accent area"],
+  [
+    "color-text-muted",
+    "color-accent-soft",
+    4.5,
+    "secondary text on a tinted accent area (a chosen card)",
+  ],
+  [
+    "color-accent-strong",
+    "color-surface-2",
+    4.5,
+    "stronger accent text on a raised or tinted area",
+  ],
   ["color-on-accent", "color-accent", 4.5, "text on a primary button"],
   ["color-on-accent", "color-accent-strong", 4.5, "text on a primary button under the pointer"],
   ["color-accent", "color-accent-soft", 4.5, "text on a secondary button under the pointer"],

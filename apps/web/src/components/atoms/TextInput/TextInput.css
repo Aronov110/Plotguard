@@ -1,19 +1,83 @@
-.text-input {
+/* The look shared by every field you type or choose in: the text input, the text area and the select.
+   TextArea and Select import this file, so the three cannot drift apart. */
+.text-input,
+.text-area,
+.select {
   display: block;
   width: 100%;
   min-height: var(--size-target);
   padding: var(--space-2) var(--space-3);
+  /* The edge is strong on purpose: it is what shows where the field is (WCAG 1.4.11, 3:1). */
   border: 2px solid var(--color-border);
   border-radius: var(--radius-1);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-medium) var(--ease-out);
 }
 
-.text-input[aria-invalid="true"] {
+.text-input::placeholder,
+.text-area::placeholder {
+  color: var(--color-text-muted);
+}
+
+.text-input:hover:not(:disabled, [aria-invalid="true"]),
+.text-area:hover:not(:disabled, [aria-invalid="true"]),
+.select:hover:not(:disabled, [aria-invalid="true"]) {
+  border-color: var(--color-text);
+}
+
+/* The accent edge and a soft halo, next to the focus ring every focused thing has. */
+.text-input:focus-visible,
+.text-area:focus-visible,
+.select:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 4px var(--ring-soft);
+}
+
+.text-input[aria-invalid="true"],
+.text-area[aria-invalid="true"],
+.select[aria-invalid="true"] {
   border-color: var(--color-danger);
 }
 
-.text-input:disabled {
+.text-input[aria-invalid="true"]:focus-visible,
+.text-area[aria-invalid="true"]:focus-visible,
+.select[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 4px var(--color-danger-bg);
+}
+
+.text-input:disabled,
+.text-area:disabled,
+.select:disabled {
   opacity: 0.7;
+}
+
+.text-area {
+  /* Only taller or shorter: wider would push the page sideways on a narrow screen. */
+  resize: vertical;
+}
+
+.select {
+  /* A long title in an option must not make the page wider than a small screen. */
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+/* Browsers paint an autofilled field yellow or blue, which clashes with both themes: repaint it in
+   the theme's own colours. (The inset shadow is the only way that works in every browser.) */
+.text-input:-webkit-autofill,
+.text-input:autofill {
+  -webkit-text-fill-color: var(--color-text);
+  box-shadow: 0 0 0 1000px var(--color-surface) inset;
+  caret-color: var(--color-text);
+}
+
+.text-input:-webkit-autofill:focus-visible,
+.text-input:autofill:focus-visible {
+  box-shadow:
+    0 0 0 1000px var(--color-surface) inset,
+    0 0 0 4px var(--ring-soft);
 }

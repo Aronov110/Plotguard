@@ -82,6 +82,12 @@ const PATHS = {
       <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
     </>
   ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c1-4 4-6 8-6s7 2 8 6" />
+    </>
+  ),
   x: <path d="M6 6l12 12M18 6L6 18" />,
 } as const;
 
@@ -101,7 +107,7 @@ export interface IconProps {
  */
 export function Icon({ name }: IconProps): ReactElement {
   return (
-    <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-icon={name}>
       {PATHS[name]}
     </svg>
   );
