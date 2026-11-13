@@ -36,4 +36,21 @@ describe("Notice", () => {
     );
     await expectNoA11yViolations(container);
   });
+
+  it("shows a picture beside its words, hidden from screen readers and not part of what is read", () => {
+    const { container } = render(<Notice>Something to know.</Notice>);
+    const icon = container.querySelector(".notice__icon svg");
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByRole("status")).toHaveTextContent(/^Something to know\.$/);
+  });
+
+  it("keeps a button or a link that it is given", () => {
+    render(
+      <Notice tone="info">
+        <p>Text.</p>
+        <button type="button">Do it</button>
+      </Notice>,
+    );
+    expect(screen.getByRole("button", { name: "Do it" })).toBeInTheDocument();
+  });
 });

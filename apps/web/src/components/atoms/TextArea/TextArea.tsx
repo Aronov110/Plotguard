@@ -1,5 +1,5 @@
 import type { ComponentPropsWithRef, ReactElement } from "react";
-import "./TextArea.css";
+import "../TextInput/TextInput.css";
 
 export interface TextAreaProps
   extends Omit<ComponentPropsWithRef<"textarea">, "className" | "aria-invalid"> {

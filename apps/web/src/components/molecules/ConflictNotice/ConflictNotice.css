@@ -5,6 +5,8 @@
   border-radius: var(--radius-1);
   background: var(--color-danger-bg);
   color: var(--color-text);
+  box-shadow: var(--shadow-1);
+  animation: conflict-notice-in var(--duration-medium) var(--ease-out) both;
 }
 
 .conflict-notice__text {
@@ -15,4 +17,16 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-3);
+}
+
+@keyframes conflict-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

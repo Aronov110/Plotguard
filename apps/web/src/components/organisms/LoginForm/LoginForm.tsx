@@ -37,6 +37,7 @@ export function LoginForm(): ReactElement {
         id={FIELD_IDS.email}
         name="email"
         label="Email"
+        icon="mail"
         type="email"
         autoComplete="username"
         inputMode="email"
@@ -48,6 +49,7 @@ export function LoginForm(): ReactElement {
         id={FIELD_IDS.password}
         name="password"
         label="Password"
+        icon="lock"
         autoComplete="current-password"
         error={form.fieldError("password")}
       />

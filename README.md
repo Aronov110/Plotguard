@@ -113,8 +113,22 @@ opens its writing screen.
   site. A normal English page loads about 95 KB of fonts.
 - **Motion.** Short transitions (150 to 500 ms) from the `--duration-*` and `--ease-out` tokens. A
   system setting for less motion switches all of them off (`prefers-reduced-motion`).
+- **Fields.** The text input, text area and select share one stylesheet
+  (`atoms/TextInput/TextInput.css`): a strong 2px edge (3:1), a hover and a focus state (accent edge
+  and a soft halo next to the focus ring), a red edge when invalid, and autofill repainted in the
+  theme's colours. Labels stay above the fields (no floating labels). The login and sign-up fields
+  carry a decorative icon; the **show-password** button is an eye joined to the right edge of the
+  password field (outside its box, so a password manager's own icon cannot cover it), still named
+  "Show password" with `aria-pressed` carrying the state. Errors slide in with an icon and still say
+  "Error:" in words for screen readers.
+- **Choices.** `ChoiceOption` draws a radio button as a card (a ring that fills with a tick, a tint, an
+  accent edge and a heavier label when chosen; the real radio button covers the card so a press
+  anywhere chooses it). `RadioGroupField` ("Where to add it") and `ScopeChoice` ("What should it
+  read?") are made of them. The AI mode ("Find plot holes" / "Get ideas") is the sliding
+  `SegmentedControl`, with the explanation of the chosen mode under it.
 - **Building blocks.** `Icon` (a small set of outline icons, decoration only), `SegmentedControl` (a
-  choice of a few with a sliding marker; real radio buttons underneath) and `ThemeSwitch`.
+  choice of a few with a sliding marker; real radio buttons underneath), `ChoiceOption` and
+  `ThemeSwitch`.
 
 ### The writing screen
 
@@ -363,8 +377,8 @@ The AI assistant is the contents of the writing screen's drawer (see above): its
 button belong to the `Drawer`, and `AiPanel` takes an `open` prop. Nothing is loaded until the drawer
 has been open once, and a run goes on while it is closed.
 
-- **Choosing and running.** A radio group asks "What do you want?": "Find plot holes" or "Get
-  ideas". It is locked while a run goes, and a run found going when the page opens decides what the
+- **Choosing and running.** A sliding control asks "What do you want?": "Find plot holes" or "Get
+  ideas", with a line under it saying what the chosen one does. It is locked while a run goes, and a run found going when the page opens decides what the
   panel shows. The writer then picks the open item or the whole project, sees the size, the price
   range and what is left of the day's allowance (`/estimate`, no AI call, shared by both kinds), and
   presses "Run the scan" or "Get ideas". The privacy notice is in the page next to the button every

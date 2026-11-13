@@ -137,4 +137,13 @@ describe("ErrorSummary", () => {
     );
     await expectNoA11yViolations(container);
   });
+
+  it("shows a picture in its heading without changing the heading's name", () => {
+    const { container } = render(<ErrorSummary items={[{ message: "Fix this." }]} />);
+    expect(container.querySelector(".error-summary__title svg")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByRole("heading", { name: "There is a problem" })).toBeInTheDocument();
+  });
 });

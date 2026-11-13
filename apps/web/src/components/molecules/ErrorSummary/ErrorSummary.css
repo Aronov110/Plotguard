@@ -5,9 +5,13 @@
   border-radius: var(--radius-1);
   background: var(--color-danger-bg);
   color: var(--color-text);
+  animation: error-summary-in var(--duration-medium) var(--ease-out) both;
 }
 
 .error-summary__title {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
   margin: 0 0 var(--space-2);
   color: var(--color-danger);
   font-size: 1.125rem;
@@ -22,4 +26,16 @@
   color: var(--color-text);
   font-weight: 600;
   text-decoration: underline;
+}
+
+@keyframes error-summary-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

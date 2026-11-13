@@ -1,5 +1,5 @@
 import type { ComponentPropsWithRef, ReactElement } from "react";
-import "./Select.css";
+import "../TextInput/TextInput.css";
 
 export interface SelectProps
   extends Omit<ComponentPropsWithRef<"select">, "className" | "aria-invalid"> {

@@ -68,6 +68,13 @@ const submit = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole("button", { name: "Create account" }));
 
 describe("RegisterForm", () => {
+  it("has a mail, a lock and a user icon in its fields, which only decorate", () => {
+    const { container } = renderForm();
+    const icons = [...container.querySelectorAll(".form-field__icon svg")];
+    expect(icons.map((icon) => icon.getAttribute("data-icon"))).toEqual(["mail", "lock", "user"]);
+    for (const icon of icons) expect(icon).toHaveAttribute("aria-hidden", "true");
+  });
+
   describe("what it shows", () => {
     it("has email, password and an optional display name, and a submit button", () => {
       renderForm();

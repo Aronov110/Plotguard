@@ -20,6 +20,15 @@ describe("InlineError", () => {
     expect(screen.getByText("Error:")).toHaveClass("visually-hidden");
   });
 
+  it("draws its picture as an icon, not as a text symbol", () => {
+    const { container } = render(<InlineError id="e">Too short.</InlineError>);
+    expect(container.querySelector(".inline-error__icon svg")).toHaveAttribute(
+      "data-icon",
+      "alert",
+    );
+    expect(container).not.toHaveTextContent("⚠");
+  });
+
   it("is a paragraph of plain text", () => {
     const { container } = render(<InlineError id="e">Too short.</InlineError>);
     expect(container.querySelector("p#e")).toBeInTheDocument();

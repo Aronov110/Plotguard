@@ -1,4 +1,5 @@
 import { type MouseEvent, type ReactElement, type Ref, useId } from "react";
+import { Icon } from "../../atoms/Icon/Icon.tsx";
 import "./ErrorSummary.css";
 
 export interface ErrorSummaryItem {
@@ -32,6 +33,7 @@ export function ErrorSummary({ items, ref }: ErrorSummaryProps): ReactElement | 
   return (
     <div ref={ref} className="error-summary" role="alert" tabIndex={-1} aria-labelledby={headingId}>
       <h2 id={headingId} className="error-summary__title">
+        <Icon name="alert" />
         There is a problem
       </h2>
       <ul className="error-summary__list">

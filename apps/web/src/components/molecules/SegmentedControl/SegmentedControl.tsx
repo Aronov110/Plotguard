@@ -9,6 +9,8 @@ export interface SegmentedOption<T extends string> {
   readonly label: string;
   /** A small picture before the label. It only decorates: the label says what it means. */
   readonly icon?: IconName;
+  /** A sentence under the control while this option is chosen, read out with the group. */
+  readonly hint?: string;
 }
 
 export interface SegmentedControlProps<T extends string> {
@@ -28,6 +30,7 @@ export interface SegmentedControlProps<T extends string> {
  * are ordinary radio buttons in a group: the arrow keys move the choice, a screen reader announces a
  * group with its question, and each option is at least 44 px tall. The chosen one is marked by an
  * outline and a heavier label, not by colour alone. The slide stops for people who ask for less motion.
+ * The chosen option's `hint`, if it has one, is shown under the control and tied to the group.
  */
 export function SegmentedControl<T extends string>({
   legend,
@@ -38,12 +41,18 @@ export function SegmentedControl<T extends string>({
   disabled = false,
 }: SegmentedControlProps<T>): ReactElement {
   const name = useId();
+  const hintId = `${name}-hint`;
   const index = options.findIndex((option) => option.value === value);
+  const hint = options[index]?.hint;
   // A value that is not among the options leaves nothing marked, instead of marking the first.
   const style = { "--count": options.length, "--index": Math.max(index, 0) } as CSSProperties;
 
   return (
-    <fieldset className="segmented" disabled={disabled}>
+    <fieldset
+      className="segmented"
+      disabled={disabled}
+      {...(hint === undefined ? {} : { "aria-describedby": hintId })}
+    >
       <legend className={hideLegend ? "visually-hidden" : "segmented__legend"}>{legend}</legend>
       <div
         className="segmented__track"
@@ -68,6 +77,11 @@ export function SegmentedControl<T extends string>({
           </label>
         ))}
       </div>
+      {hint === undefined ? null : (
+        <p id={hintId} className="segmented__hint">
+          {hint}
+        </p>
+      )}
     </fieldset>
   );
 }

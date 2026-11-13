@@ -12,6 +12,11 @@
   font-weight: 650;
 }
 
+.segmented__hint {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+}
+
 .segmented__track {
   position: relative;
   display: grid;

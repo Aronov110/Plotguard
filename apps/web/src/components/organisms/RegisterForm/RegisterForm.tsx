@@ -39,6 +39,7 @@ export function RegisterForm(): ReactElement {
         id={FIELD_IDS.email}
         name="email"
         label="Email"
+        icon="mail"
         type="email"
         autoComplete="email"
         inputMode="email"
@@ -50,6 +51,7 @@ export function RegisterForm(): ReactElement {
         id={FIELD_IDS.password}
         name="password"
         label="Password"
+        icon="lock"
         autoComplete="new-password"
         hint="12 to 128 characters. Spaces and any language are allowed."
         error={form.fieldError("password")}
@@ -58,6 +60,7 @@ export function RegisterForm(): ReactElement {
         id={FIELD_IDS.displayName}
         name="displayName"
         label="Display name"
+        icon="user"
         optional
         autoComplete="nickname"
         hint="Up to 80 characters."

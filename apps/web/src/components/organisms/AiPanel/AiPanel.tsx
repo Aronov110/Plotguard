@@ -14,9 +14,12 @@ import { AiPrivacyNotice } from "../../molecules/AiPrivacyNotice/AiPrivacyNotice
 import { CostHint } from "../../molecules/CostHint/CostHint.tsx";
 import { DeleteConfirmation } from "../../molecules/DeleteConfirmation/DeleteConfirmation.tsx";
 import { FocusField } from "../../molecules/FocusField/FocusField.tsx";
-import { ModeChoice } from "../../molecules/ModeChoice/ModeChoice.tsx";
 import { Notice } from "../../molecules/Notice/Notice.tsx";
 import { ScopeChoice, type ScopeValue } from "../../molecules/ScopeChoice/ScopeChoice.tsx";
+import {
+  SegmentedControl,
+  type SegmentedOption,
+} from "../../molecules/SegmentedControl/SegmentedControl.tsx";
 import { AnalysisResult } from "../AnalysisResult/AnalysisResult.tsx";
 import "./AiPanel.css";
 
@@ -74,6 +77,22 @@ const WORDS: Readonly<
     lost: "The ideas and the focus are lost for good. This cannot be undone.",
   },
 };
+
+/** What the AI can do, as the choices of the sliding control. */
+const MODES: readonly SegmentedOption<AnalysisKind>[] = [
+  {
+    value: "plot_holes",
+    label: "Find plot holes",
+    icon: "alert",
+    hint: "Points out where the story contradicts itself or leaves something unexplained.",
+  },
+  {
+    value: "ideas",
+    label: "Get ideas",
+    icon: "sparkles",
+    hint: "Suggests where the story could go next. They are suggestions, not corrections.",
+  },
+];
 
 /** Shows how long a run has been going. The text is not a live region, so it is not read out. */
 function Progress({ analysis, trouble }: { analysis: Analysis; trouble: boolean }): ReactElement {
@@ -187,7 +206,13 @@ export function AiPanel({
           </Notice>
         ) : (
           <>
-            <ModeChoice value={kind} onChange={setMode} disabled={busy} />
+            <SegmentedControl
+              legend="What do you want?"
+              options={MODES}
+              value={kind}
+              onChange={setMode}
+              disabled={busy}
+            />
             <ScopeChoice
               value={scope}
               onChange={setChoice}
