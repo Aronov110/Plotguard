@@ -14,17 +14,96 @@
   color: var(--color-text-muted);
 }
 
-/* One column on a narrow screen: the outline above the text. */
+/* The three parts of the screen: the outline, the text and the AI drawer. On a narrow screen they
+   are one column (outline, text, drawer) and the outline and the drawer open by height. */
 .writing-page__panes {
-  display: grid;
-  gap: var(--space-4);
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
 }
 
-/* Side by side when there is room: the outline on the left, the text beside it. */
+.writing-page__side,
+.writing-page__ai {
+  /* The drawer fills the column; on a wide screen the column gives it a fixed width (below). */
+  --drawer-width: 100%;
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  transition: grid-template-rows var(--duration-slow) var(--ease-out);
+}
+
+.writing-page__side[data-open="true"],
+.writing-page__panes[data-ai="open"] .writing-page__ai {
+  grid-template-rows: 1fr;
+}
+
+.writing-page__side[data-open="false"] {
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--duration-slow) var(--ease-out),
+    visibility 0s var(--duration-slow);
+}
+
+.writing-page__side-inner {
+  min-height: 0;
+  /* Room for the focus ring of the links inside, which the clipping below would cut off. */
+  padding: var(--space-1);
+  overflow: hidden;
+}
+
+.writing-page__text {
+  min-width: 0;
+  padding: var(--space-3) 0;
+}
+
+/* Side by side when there is room: the outline on the left, the text in the middle, the drawer on
+   the right. The outer columns grow from nothing, so the text column gives way smoothly. */
 @media (min-width: 60rem) {
   .writing-page__panes {
-    grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
+    display: grid;
+    grid-template-columns: var(--outline-width) minmax(0, 1fr) var(--ai-width);
     align-items: start;
+    --outline-width: 18rem;
+    --ai-width: 0rem;
+    transition: grid-template-columns var(--duration-slow) var(--ease-out);
+  }
+
+  .writing-page__panes[data-outline="closed"] {
+    --outline-width: 0rem;
+  }
+
+  .writing-page__panes[data-ai="open"] {
+    --ai-width: 32rem;
+  }
+
+  .writing-page__side,
+  .writing-page__ai {
+    display: block;
+    transition: none;
+    overflow: hidden;
+  }
+
+  .writing-page__side-inner {
+    width: 18rem;
+    padding-right: var(--space-4);
+  }
+
+  .writing-page__text {
+    padding: 0 var(--space-4);
+  }
+
+  /* The drawer follows the page as it scrolls, and scrolls inside itself if it is tall. */
+  .writing-page__ai {
+    --drawer-width: 30rem;
+    position: sticky;
+    top: var(--space-3);
+    align-self: start;
+    max-height: calc(100vh - 2 * var(--space-3));
+    padding: var(--space-1) var(--space-1) var(--space-3) var(--space-3);
+  }
+
+  /* It scrolls only while it is open and has things to reach by keyboard inside it: a closed, empty
+     column that scrolls has no keyboard access (axe: scrollable-region-focusable). */
+  .writing-page__panes[data-ai="open"] .writing-page__ai {
+    overflow-y: auto;
   }
 }

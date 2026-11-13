@@ -6,6 +6,7 @@ import { analysesApi } from "../../../../lib/api/analyses-api.ts";
 import { ApiError } from "../../../../lib/api/problem.ts";
 import { AuthProvider } from "../../../../lib/auth/session.tsx";
 import { expectNoA11yViolations } from "../../../../test-support/a11y.ts";
+import { AiPanelHarness } from "../../../../test-support/ai-panel-harness.tsx";
 import {
   makeAnalysis,
   makeEstimate,
@@ -15,7 +16,7 @@ import {
   page,
 } from "../../../../test-support/analyses-handlers.ts";
 import { signedInManager } from "../../../../test-support/signed-in-manager.ts";
-import { AiPanel, type AiPanelProps } from "../AiPanel.tsx";
+import type { AiPanelProps } from "../AiPanel.tsx";
 
 const TITLES = new Map([
   ["doc-1", "The harbour"],
@@ -51,7 +52,7 @@ async function renderPanel(props: Partial<AiPanelProps> = {}) {
   const view = render(
     <AuthProvider manager={context.manager}>
       <MemoryRouter initialEntries={["/app/projects/project-1/write"]}>
-        <AiPanel
+        <AiPanelHarness
           projectId="project-1"
           openItem={undefined}
           titles={TITLES}
@@ -100,10 +101,9 @@ describe("AiPanel: opening and closing", () => {
     expect(api.list).not.toHaveBeenCalled();
   });
 
-  it("opens and closes with the one button, which the panel's heading holds", async () => {
+  it("opens and closes with the screen's button", async () => {
     spies();
     const { user } = await renderPanel();
-    expect(screen.getByRole("heading", { level: 2, name: /AI assistant/ })).toBeInTheDocument();
 
     await openPanel(user);
     const toggle = screen.getByRole("button", { name: /AI assistant/ });
@@ -201,7 +201,7 @@ describe("AiPanel: what to read", () => {
     const tree = (openItem: AiPanelProps["openItem"]) => (
       <AuthProvider manager={context.manager}>
         <MemoryRouter>
-          <AiPanel
+          <AiPanelHarness
             projectId="project-1"
             openItem={openItem}
             titles={TITLES}
