@@ -367,12 +367,12 @@ bun run lint
 bun run typecheck
 bun run test               # unit tests, no database needed
 bun run test:integration   # needs the database from `bun run db:up`
-bun run test:e2e           # browser tests, see below
+bun run --filter @plotpal/web test:e2e   # browser tests, see below
 ```
 
 ### End-to-end tests (Playwright)
 
-`bun run test:e2e` drives a real browser (Chromium and WebKit, the Safari engine) through the built
+`bun run --filter @plotpal/web test:e2e` (or `bunx playwright test` in `apps/web`) drives a real browser (Chromium and WebKit, the Safari engine) through the built
 web app and a real API. It is not part of `bun run test`: it is slower and needs the database.
 
 - **First time:** `cd apps/web && bunx playwright install chromium webkit` downloads the browsers
@@ -389,7 +389,8 @@ web app and a real API. It is not part of `bun run test`: it is slower and needs
   plain cookie name `csrf_token` over http and a production build reads only `__Host-csrf_token`.
   The production cookie names and flags (`__Host-`, `Secure`) need https and are not covered.
   WebKit does not Tab to links (the Safari default), so link tab stops are checked in Chromium only.
-  No automatic checks run on GitHub, so run this yourself before a PR that touches the web app.
+  On GitHub these run for every pull request (see "Continuous integration" below); run them yourself
+  before a PR that touches the web app, so that a red run is a surprise.
 - **Sign-out followed by a login:** a sign-out answer deletes the login cookies whenever it
   arrives, so the web app sends a login or sign-up only after the sign-out request of the same tab
   has finished (`sign-out-race.e2e.ts` proves the order). Not covered: a sign-out in one tab and a
@@ -405,3 +406,24 @@ apps/api   Fastify backend (TypeScript, Zod-validated env config, Drizzle + Post
 apps/web   React + Vite frontend (Atomic Design under src/components)
 .plans/    Dated plans with a status header (draft / approved / done)
 ```
+
+## Continuous integration
+
+GitHub Actions runs on every pull request and every push to `main` (`.github/workflows/`):
+
+| Workflow / job                            | What it runs                                                 | In the merge gate                  |
+| ----------------------------------------- | ------------------------------------------------------------ | ---------------------------------- |
+| `CI` / `Lint, types and unit tests`       | `bun run lint`, `typecheck`, `test`                          | yes                                |
+| `CI` / `Integration tests (PostgreSQL)`   | `bun run test:integration` against a PostgreSQL 18 container | yes                                |
+| `CI` / `Browser tests` (Chromium, WebKit) | the Playwright tests, one job per browser                    | not yet (known flaky WebKit tests) |
+| `Dependency audit`                        | `bun audit`, also every Monday                               | no                                 |
+
+The `CI` job at the end of `ci.yml` is the one name to require before merging: it fails when any job it
+waits for failed, was cancelled or was skipped. A failed browser run uploads its report as an artifact
+for seven days (Actions tab, the run, "Artifacts"); open it with `bunx playwright show-report`.
+
+Details worth knowing: every action is pinned to a full commit hash, the workflows have read-only
+rights and use no secrets (the AI tests use the fake model), the database in CI is a throwaway container
+whose password is in the workflow on purpose, and the browser tests get a signing secret made for that
+run only. The local action `.github/actions/setup` installs Bun, Node and the locked dependencies for
+every job, and the install fails when `package.json` and `bun.lock` disagree.

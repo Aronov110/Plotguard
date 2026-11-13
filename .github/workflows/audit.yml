@@ -1,0 +1,24 @@
+name: Dependency audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # A new advisory can appear without any change here: look every Monday as well.
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: bun audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: bun audit
