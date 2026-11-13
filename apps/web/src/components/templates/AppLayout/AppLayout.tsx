@@ -2,7 +2,9 @@ import { type ReactElement, type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../../../lib/auth/session.tsx";
 import { Button } from "../../atoms/Button/Button.tsx";
+import { Icon } from "../../atoms/Icon/Icon.tsx";
 import { SkipLink } from "../../atoms/SkipLink/SkipLink.tsx";
+import { ThemeSwitch } from "../../molecules/ThemeSwitch/ThemeSwitch.tsx";
 import "./AppLayout.css";
 
 /**
@@ -39,9 +41,13 @@ export function AppLayout({
       <SkipLink targetId="main-content">Skip to main content</SkipLink>
       <header className="app-layout__header">
         <Link to="/app" className="app-layout__brand">
+          <span className="app-layout__logo">
+            <Icon name="plot-mark" />
+          </span>
           Plotpal
         </Link>
         <div className="app-layout__account">
+          <ThemeSwitch />
           {name === undefined ? null : (
             <p className="app-layout__who">
               Signed in as <strong>{name}</strong>

@@ -11,6 +11,11 @@
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-medium) var(--ease-out),
+    background-color var(--duration-fast),
+    border-color var(--duration-fast);
 }
 
 .button--primary {
@@ -29,8 +34,24 @@
   color: var(--color-on-danger);
 }
 
+/* A small lift under the pointer and a press when clicked: the button answers the hand. */
 .button:hover:not(:disabled, [aria-disabled="true"]) {
-  text-decoration: underline;
+  box-shadow: var(--shadow-1);
+  transform: translateY(-1px);
+}
+
+.button--primary:hover:not(:disabled, [aria-disabled="true"]) {
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent-strong);
+}
+
+.button--secondary:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--color-accent-soft);
+}
+
+.button:active:not(:disabled, [aria-disabled="true"]) {
+  box-shadow: none;
+  transform: translateY(1px) scale(0.98);
 }
 
 .button[aria-busy="true"] {

@@ -1,0 +1,17 @@
+.theme-switch {
+  min-width: 0;
+}
+
+/* The three words take room a narrow screen does not have: show the pictures, keep the words for
+   screen readers. The pictures alone are still 44 px targets. */
+@media (max-width: 40rem) {
+  .theme-switch .segmented__option > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

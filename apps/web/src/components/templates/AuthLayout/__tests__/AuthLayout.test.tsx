@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { expectNoPageA11yViolations } from "../../../../test-support/a11y.ts";
 import { AuthLayout } from "../AuthLayout.tsx";
@@ -56,5 +56,16 @@ describe("AuthLayout", () => {
       </AuthLayout>,
     );
     await expectNoPageA11yViolations();
+  });
+
+  it("offers the colour theme choice before the form, inside the page", () => {
+    render(
+      <AuthLayout title="Log in">
+        <p>Body</p>
+      </AuthLayout>,
+    );
+    expect(
+      within(screen.getByRole("main")).getByRole("group", { name: "Colour theme" }),
+    ).toBeInTheDocument();
   });
 });

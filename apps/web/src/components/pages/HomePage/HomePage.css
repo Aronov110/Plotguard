@@ -4,6 +4,12 @@
   padding: var(--space-5) var(--space-3);
 }
 
+.home-page__tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-4);
+}
+
 .home-page__tagline {
   margin: 0 0 var(--space-4);
   color: var(--color-text-muted);

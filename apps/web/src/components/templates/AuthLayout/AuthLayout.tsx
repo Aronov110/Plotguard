@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { PageHeading } from "../../atoms/PageHeading/PageHeading.tsx";
+import { ThemeSwitch } from "../../molecules/ThemeSwitch/ThemeSwitch.tsx";
 import "./AuthLayout.css";
 
 export interface AuthLayoutProps {
@@ -14,6 +15,9 @@ export interface AuthLayoutProps {
 export function AuthLayout({ title, footer, children }: AuthLayoutProps): ReactElement {
   return (
     <main id="main-content" className="auth-layout">
+      <div className="auth-layout__tools">
+        <ThemeSwitch />
+      </div>
       <div className="auth-layout__card">
         <PageHeading>{title}</PageHeading>
         {children}

@@ -90,4 +90,9 @@ describe("HomePage", () => {
       expect(await screen.findByRole("link", { name: "Go to your projects" })).toBeInTheDocument();
     });
   });
+
+  it("offers the colour theme choice", async () => {
+    renderApp();
+    expect(await screen.findByRole("group", { name: "Colour theme" })).toBeInTheDocument();
+  });
 });
